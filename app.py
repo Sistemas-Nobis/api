@@ -10,9 +10,9 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
 app = FastAPI(
-    title="API NOBIS - TEST",  # Cambia el nombre de la pestaña
-    description="Contraseñas y consultas.",
-    version="1.0.0",
+    title="API NOBIS",  # Cambia el nombre de la pestaña
+    description="Utilidades para automatizaciones de procesos.",
+    version="1.0.1",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
