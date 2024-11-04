@@ -1,18 +1,21 @@
 from fastapi import FastAPI, HTTPException, Query, Depends
 from pydantic import BaseModel
 from config import load_password, update_password
-from funciones import consulta_aportes, obtener_token_gecros
+from funciones import obtener_token_gecros
 from fastapi.responses import StreamingResponse
 import requests
 from pandas import json_normalize
 import io
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
+import pyodbc
+import pandas as pd
+import json
 
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="1.0.1",
+    version="1.0.2",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -44,33 +47,101 @@ async def actualizar_contraseña(password_update: PasswordUpdate):
 
 
 # Endpoint con consultas de aportes para Widget de retención
-@app.get("/ultimos_aportes")
-async def ultimos_aportes(dni: int = Query(..., description="Número de DNI del beneficiario")):
+@app.get("/ultimos_aportes/{dni}")
+async def ultimos_aportes(dni: int):
+    contraseña = load_password()
+
     try:
-        # Ejecuta la consulta y obtiene el DataFrame
-        df = consulta_aportes(dni)
-        
-        # Convierte el DataFrame a JSON para la respuesta
-        data_json = df.to_dict(orient="records")
-        return {"data": data_json}
+        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=MACENA-DB\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña}")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+
+    # Definir la consulta SQL
+    query = f"""
+    DECLARE @PeriodoActual INT = CAST(FORMAT(GETDATE(), 'yyyyMM') AS INT);
+    SELECT DISTINCT
+        A.fecha,
+        A.emp_id,
+        A.Periodo,
+        A.Sueldo,
+        A.aporte,
+        B.numero
+    FROM
+        aportes AS A
+    LEFT JOIN
+        benef AS B ON A.ben_id = B.ben_id
+    WHERE
+        A.Periodo >= @PeriodoActual - 2
+        AND A.aporte > 1
+        AND B.numero = {dni}
+    ORDER BY
+        A.Periodo DESC;
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
     
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+    
+    finally:
+        conn.close()
     
 
 # Endpoint con consultas de fecha de alta y patologias para Widget de retención
-@app.get("/fecha_alta_y_patologias")
-async def consulta_fecha_alta_y_patologias(dni: int = Query(..., description="Número de afiliado")):
+@app.get("/fecha_alta_y_patologias/{dni}")
+async def consulta_fecha_alta_y_patologias(dni: int):
+
+    contraseña = load_password()
+
     try:
-        # Ejecuta la consulta y obtiene el DataFrame
-        df = consulta_fecha_alta_y_patologias(dni)
-        
-        # Convierte el DataFrame a JSON para la respuesta
-        data_json = df.to_dict(orient="records")
-        return {"data": data_json}
+        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=MACENA-DB\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña}")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+
+    # Definir la consulta SQL
+    query = f"""
+    SELECT DISTINCT
+        C.ben_id,
+        C.doc_id,
+        B.bc_fecha AS fecha_alta,
+        STUFF((
+            SELECT ', ' + TC.tcob_nombre
+            FROM coberturaesp AS E
+            LEFT JOIN tipocobertura AS TC ON E.id_tipocob = TC.id_tipocob
+            WHERE E.ben_id = C.ben_id
+                AND GETDATE() BETWEEN E.cobesp_desde AND E.cobesp_hasta
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS cobertura_especial
+    FROM benef C
+        LEFT JOIN BenefCambio B ON B.ben_id = C.ben_id
+        LEFT JOIN tipomov T ON T.tm_id = B.tcambio_id
+    WHERE 
+        T.tm_id = 2 AND C.doc_id = {dni}
+    GROUP BY 
+        C.ben_id, C.doc_id, B.bc_fecha
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+
+        # Eliminar espacios en blanco al inicio y al final de los valores en la columna 'cobertura_especial'
+        df['cobertura_especial'] = df['cobertura_especial'].str.strip().replace("  ", "")
+
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
     
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=f"Error al ejecutar la consulta SQL: {e}")
+    
+    finally:
+        conn.close()
 
 
 # Endpoint para descargar PDF de autorización
