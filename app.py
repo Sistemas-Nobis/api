@@ -15,7 +15,7 @@ import json
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="1.0.2",
+    version="1.0.3",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -55,7 +55,7 @@ async def ultimos_aportes(dni: int):
         conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=MACENA-DB\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña}")
 
     except pyodbc.Error as e:
-        raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
 
     # Definir la consulta SQL
     query = f"""
@@ -102,7 +102,7 @@ async def consulta_fecha_alta_y_patologias(dni: int):
         conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=MACENA-DB\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña}")
 
     except pyodbc.Error as e:
-        raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
 
     # Definir la consulta SQL
     query = f"""
