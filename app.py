@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query, Depends
 from pydantic import BaseModel
 from config import load_password, update_password
 from funciones import obtener_token_gecros
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 import requests
 from pandas import json_normalize
 import io
@@ -11,6 +11,9 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 import pyodbc
 import pandas as pd
 import json
+import pymysql
+import random
+import string
 
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
@@ -145,10 +148,10 @@ async def consulta_fecha_alta_y_patologias(dni: int):
 
 
 # Endpoint para descargar PDF de autorización
-@app.get("/descargar_autorizacion/{dni}&{id_aut}")
+@app.get("/descargar_autorizacion/{dni}-{id_aut}")
 async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obtener_token_gecros)):
 
-    print(token)
+    #print(token)
 
     # Token y headers
     headers = {
@@ -182,7 +185,7 @@ async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obte
 
 
 # Endpoint para descargar PDF de boleta (comprobante de deuda)
-@app.get("/descargar_boleta/{id_ben}&{id_comp}")
+@app.get("/descargar_boleta/{id_ben}-{id_comp}")
 async def descargar_boleta(id_ben: int, id_comp: int, token:str = Depends(obtener_token_gecros)):
 
     print(token)
@@ -206,3 +209,125 @@ async def descargar_boleta(id_ben: int, id_comp: int, token:str = Depends(obtene
         return StreamingResponse(pdf_bytes, media_type="application/pdf", headers=headers)
     else:
         raise HTTPException(status_code=response_template.status_code, detail="Error al descargar el PDF")
+    
+
+### ACORTADOR DE ENLACES / GENERADOR DE ALIAS ###
+
+# Configuración de la conexión a MySQL
+def get_db_connection():
+    return pymysql.connect(
+        host="10.2.0.7",
+        user="api",
+        password="nobisapi",
+        database="enlaces"
+    )
+
+
+# Inicialización de la base de datos
+def init_db():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS autorizaciones
+                      (alias VARCHAR(50) PRIMARY KEY, original_url TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS boletas
+                      (alias VARCHAR(50) PRIMARY KEY, original_url TEXT)''')
+    conn.commit()
+    cursor.close()
+    conn.close()
+init_db()
+
+
+# Generador de alias único
+def generate_unique_alias():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
+
+@app.post("/acortar_autorizacion")
+async def acortar_link_aut(original_url: str, alias: str = None):
+    if not original_url:
+        raise HTTPException(status_code=400, detail="Falta la URL original")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Si no se proporciona un alias, genera uno único
+    if not alias:
+        alias = generate_unique_alias()
+        cursor.execute("SELECT alias FROM autorizaciones WHERE alias = %s", (alias,))
+        while cursor.fetchone():
+            alias = generate_unique_alias()  # Reintenta hasta encontrar uno único
+
+    # Verifica si el alias ya existe en caso de que el usuario lo haya especificado
+    cursor.execute("SELECT alias FROM autorizaciones WHERE alias = %s", (alias,))
+    if cursor.fetchone():
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="El alias ya existe")
+
+    # Inserta el enlace con el alias en la base de datos
+    cursor.execute("INSERT INTO autorizaciones (alias, original_url) VALUES (%s, %s)", (alias, original_url))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return f"http://api.nobis.com.ar/{alias}"
+
+
+@app.post("/acortar_boleta")
+async def acortar_link_bol(original_url: str, alias: str = None):
+    if not original_url:
+        raise HTTPException(status_code=400, detail="Falta la URL original")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Si no se proporciona un alias, genera uno único
+    if not alias:
+        alias = generate_unique_alias()
+        cursor.execute("SELECT alias FROM boletas WHERE alias = %s", (alias,))
+        while cursor.fetchone():
+            alias = generate_unique_alias()  # Reintenta hasta encontrar uno único
+
+    # Verifica si el alias ya existe en caso de que el usuario lo haya especificado
+    cursor.execute("SELECT alias FROM boletas WHERE alias = %s", (alias,))
+    if cursor.fetchone():
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="El alias ya existe")
+
+    # Inserta el enlace con el alias en la base de datos
+    cursor.execute("INSERT INTO boletas (alias, original_url) VALUES (%s, %s)", (alias, original_url))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return f"http://api.nobis.com.ar/{alias}"
+
+# Función para buscar el alias en todas las tablas
+def find_alias_in_all_tables(alias: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Obtener todas las tablas de la base de datos
+        cursor.execute("SHOW TABLES")
+        tables = cursor.fetchall()
+
+        # Recorrer cada tabla y buscar el alias
+        for (table_name,) in tables:
+            query = f"SELECT original_url FROM {table_name} WHERE alias = %s"
+            cursor.execute(query, (alias,))
+            result = cursor.fetchone()
+            if result:
+                return result[0]  # Retorna la URL si se encuentra el alias
+        return None  # Retorna None si no encuentra el alias en ninguna tabla
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/{alias}")
+async def redirect_link(alias: str):
+    original_url = find_alias_in_all_tables(alias)
+    if original_url:
+        return RedirectResponse(original_url)
+    else:
+        raise HTTPException(status_code=404, detail="Alias no encontrado")
