@@ -55,7 +55,7 @@ async def ultimos_aportes(dni: int):
     contraseña = load_password()
 
     try:
-        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
 
     except pyodbc.Error as e:
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
@@ -102,7 +102,7 @@ async def consulta_fecha_alta_y_patologias(dni: int):
     contraseña = load_password()
 
     try:
-        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
 
     except pyodbc.Error as e:
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
