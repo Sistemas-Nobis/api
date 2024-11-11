@@ -18,7 +18,7 @@ import string
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="1.0.3",
+    version="2.1.2",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -55,7 +55,7 @@ async def ultimos_aportes(dni: int):
     contraseña = load_password()
 
     try:
-        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=MACENA-DB\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña}")
+        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
 
     except pyodbc.Error as e:
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
@@ -102,7 +102,7 @@ async def consulta_fecha_alta_y_patologias(dni: int):
     contraseña = load_password()
 
     try:
-        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=MACENA-DB\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña}")
+        conn = pyodbc.connect(fr"DRIVER={{SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
 
     except pyodbc.Error as e:
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
@@ -243,7 +243,7 @@ def generate_unique_alias():
 
 
 @app.post("/acortar_autorizacion")
-async def acortar_link_aut(original_url: str, alias: str = None):
+async def acortar_autorizacion(original_url: str, alias: str = None):
     if not original_url:
         raise HTTPException(status_code=400, detail="Falta la URL original")
 
@@ -274,7 +274,7 @@ async def acortar_link_aut(original_url: str, alias: str = None):
 
 
 @app.post("/acortar_boleta")
-async def acortar_link_bol(original_url: str, alias: str = None):
+async def acortar_boleta(original_url: str, alias: str = None):
     if not original_url:
         raise HTTPException(status_code=400, detail="Falta la URL original")
 
