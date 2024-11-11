@@ -18,7 +18,7 @@ import string
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="2.1.2",
+    version="2.2.3",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -29,7 +29,7 @@ class PasswordUpdate(BaseModel):
 FastAPICache.init(InMemoryBackend())
 
 # Endpoint para obtener la contraseña actual
-@app.get("/obtener_contrasena")
+@app.get("/obtener_contrasena", tags=["Contraseña | Macena DB"])
 async def obtener_contraseña():
     password = load_password()
     if password:
@@ -38,7 +38,7 @@ async def obtener_contraseña():
 
 
 # Endpoint para actualizar la contraseña
-@app.post("/actualizar_contrasena")
+@app.post("/actualizar_contrasena", tags=["Contraseña | Macena DB"])
 async def actualizar_contraseña(password_update: PasswordUpdate):
     new_password = password_update.password
     if not new_password:
@@ -50,7 +50,7 @@ async def actualizar_contraseña(password_update: PasswordUpdate):
 
 
 # Endpoint con consultas de aportes para Widget de retención
-@app.get("/ultimos_aportes/{dni}")
+@app.get("/ultimos_aportes/{dni}", tags=["Consultas | Macena DB"])
 async def ultimos_aportes(dni: int):
     contraseña = load_password()
 
@@ -96,7 +96,7 @@ async def ultimos_aportes(dni: int):
     
 
 # Endpoint con consultas de fecha de alta y patologias para Widget de retención
-@app.get("/fecha_alta_y_patologias/{dni}")
+@app.get("/fecha_alta_y_patologias/{dni}", tags=["Consultas | Macena DB"])
 async def consulta_fecha_alta_y_patologias(dni: int):
 
     contraseña = load_password()
@@ -148,7 +148,7 @@ async def consulta_fecha_alta_y_patologias(dni: int):
 
 
 # Endpoint para descargar PDF de autorización
-@app.get("/descargar_autorizacion/{dni}-{id_aut}")
+@app.get("/descargar_autorizacion/{dni}-{id_aut}", tags=["Auxiliares | BOT WISE"])
 async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obtener_token_gecros)):
 
     #print(token)
@@ -185,7 +185,7 @@ async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obte
 
 
 # Endpoint para descargar PDF de boleta (comprobante de deuda)
-@app.get("/descargar_boleta/{id_ben}-{id_comp}")
+@app.get("/descargar_boleta/{id_ben}-{id_comp}", tags=["Auxiliares | BOT WISE"])
 async def descargar_boleta(id_ben: int, id_comp: int, token:str = Depends(obtener_token_gecros)):
 
     print(token)
@@ -242,7 +242,7 @@ def generate_unique_alias():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
 
-@app.post("/acortar_autorizacion")
+@app.post("/acortar_autorizacion", tags=["Auxiliares | BOT WISE"])
 async def acortar_autorizacion(original_url: str, alias: str = None):
     if not original_url:
         raise HTTPException(status_code=400, detail="Falta la URL original")
@@ -273,7 +273,7 @@ async def acortar_autorizacion(original_url: str, alias: str = None):
     return f"http://api.nobis.com.ar/{alias}"
 
 
-@app.post("/acortar_boleta")
+@app.post("/acortar_boleta", tags=["Auxiliares | BOT WISE"])
 async def acortar_boleta(original_url: str, alias: str = None):
     if not original_url:
         raise HTTPException(status_code=400, detail="Falta la URL original")
@@ -304,7 +304,7 @@ async def acortar_boleta(original_url: str, alias: str = None):
     return f"http://api.nobis.com.ar/{alias}"
 
 # Función para buscar el alias en todas las tablas
-def find_alias_in_all_tables(alias: str):
+def buscar_alias(alias: str):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -324,9 +324,9 @@ def find_alias_in_all_tables(alias: str):
         cursor.close()
         conn.close()
 
-@app.get("/{alias}")
-async def redirect_link(alias: str):
-    original_url = find_alias_in_all_tables(alias)
+@app.get("/{alias}", tags=["Auxiliares | BOT WISE"])
+async def redireccionar(alias: str):
+    original_url = buscar_alias(alias)
     if original_url:
         return RedirectResponse(original_url)
     else:
