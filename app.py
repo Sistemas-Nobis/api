@@ -270,7 +270,7 @@ async def acortar_autorizacion(original_url: str, alias: str = None):
     cursor.close()
     conn.close()
 
-    return f"http://descargar.nobis.com.ar/{alias}"
+    return f"https://descargar.nobis.com.ar/{alias}"
 
 
 @app.post("/acortar_boleta", tags=["Auxiliares | BOT WISE"])
@@ -301,7 +301,7 @@ async def acortar_boleta(original_url: str, alias: str = None):
     cursor.close()
     conn.close()
 
-    return f"http://descargar.nobis.com.ar/{alias}"
+    return f"https://descargar.nobis.com.ar/{alias}"
 
 # Función para buscar el alias en todas las tablas
 def buscar_alias(alias: str):
