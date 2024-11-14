@@ -21,6 +21,10 @@ app = FastAPI(
     version="2.2.3",
 )
 
+@app.get("/ir")
+async def redirect_to_main():
+    return RedirectResponse(url="/docs")
+
 # Definir un modelo para la entrada de la nueva contraseña
 class PasswordUpdate(BaseModel):
     password: str
