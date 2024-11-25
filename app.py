@@ -147,6 +147,44 @@ async def consulta_fecha_alta_y_patologias(dni: int):
         conn.close()
 
 
+# Endpoint con consultas de aportes de cuenta corriente para Widget de retención
+@app.get("/ultimos_aportes_ctacte/{dni}", tags=["Consultas | Macena DB"])
+async def ultimos_aportes_cuenta_corriente(dni: int):
+    contraseña = load_password()
+
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+    # Definir la consulta SQL
+    query = f"""
+    DECLARE @PeriodoActual INT = CAST(FORMAT(GETDATE(), 'yyyyMM') AS INT);
+    SELECT A.numero, C.comp_peri, C.comp_total, C.comp_fecha FROM benef AS A
+    LEFT JOIN benefagecta AS B ON A.ben_gr_id = B.ben_gr_id
+    LEFT JOIN compctacte AS C ON B.agecta_id = C.agecta_id
+    WHERE 
+        C.tcomp_id = 15 
+        AND C.estado = 'N' 
+        AND A.numero = {dni} 
+        AND C.comp_peri >= @PeriodoActual - 2
+    ORDER BY C.comp_fecha DESC
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+    
+    finally:
+        conn.close()
+
+
 # Endpoint para descargar PDF de autorización
 @app.get("/descargar_autorizacion/{dni}-{id_aut}", tags=["Auxiliares | BOT WISE"])
 async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obtener_token_gecros)):
