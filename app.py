@@ -18,7 +18,7 @@ import string
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="2.2.3",
+    version="3.3.5",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -369,3 +369,37 @@ async def redireccionar(alias: str):
         return RedirectResponse(original_url)
     else:
         raise HTTPException(status_code=404, detail="Alias no encontrado")
+
+
+# Endpoint consulta de forma de pago y bonificaciones del afiliado
+@app.get("/fpago_bonif/{dni}", tags=["Consultas | Macena DB"])
+async def forma_de_pago_y_bonificaciones(dni: int):
+    contraseña = load_password()
+
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+    # Definir la consulta SQL
+    query = f"""
+    SELECT A.agecta_id, B.ben_gr_id, A.doc_id, F.fpago_nombre, C.peri_hasta, C.porcentaje FROM agentescta AS A
+    LEFT JOIN formapago AS F ON A.fpago_id = F.fpago_id
+    LEFT JOIN benefagecta AS B ON A.agecta_id = B.agecta_id
+    LEFT JOIN BonificaRecargoBenef AS C ON B.ben_gr_id = C.ben_gr_id
+    WHERE A.doc_id = {dni}
+    ORDER BY C.peri_hasta DESC
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+    
+    finally:
+        conn.close()
