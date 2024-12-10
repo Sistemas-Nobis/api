@@ -161,7 +161,7 @@ async def ultimos_aportes_cuenta_corriente(dni: int):
     # Definir la consulta SQL
     query = f"""
     DECLARE @PeriodoActual INT = CAST(FORMAT(GETDATE(), 'yyyyMM') AS INT);
-    SELECT A.numero, C.comp_peri, C.comp_total, C.comp_fecha FROM benef AS A
+    SELECT C.comp_id, A.numero, C.comp_peri, C.comp_total, C.comp_fecha FROM benef AS A
     LEFT JOIN benefagecta AS B ON A.ben_gr_id = B.ben_gr_id
     LEFT JOIN compctacte AS C ON B.agecta_id = C.agecta_id
     WHERE 
@@ -390,6 +390,37 @@ async def forma_de_pago_y_bonificaciones(dni: int):
     LEFT JOIN BonificaRecargoBenef AS C ON B.ben_gr_id = C.ben_gr_id
     WHERE A.doc_id = {dni}
     ORDER BY C.peri_hasta DESC
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+    
+    finally:
+        conn.close()
+
+# Endpoint asociacion de aportes y subdivisiones para Widget de retención
+@app.get("/desglose_aportes/{aporte_id}", tags=["Consultas | Macena DB"])
+async def detalle_de_aportes(aporte_id: int):
+    contraseña = load_password()
+
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+    # Definir la consulta SQL
+    query = f"""
+    SELECT A.comp_id AS Aporte_id, A.comp_total AS Aporte_total, B.compid_pri AS CompId_Asociado, C.comp_suc AS CompSuc_Asociado,C.comp_nro AS CompNum_Asociado, B.compid_total AS AporteExtraido FROM compctacte AS A
+    LEFT JOIN cancelacompctacte AS B ON A.comp_id = B.compid_rel
+    LEFT JOIN compctacte AS C ON C.comp_id = B.compid_pri
+    WHERE A.comp_id = {aporte_id}
     """
     
     # Ejecutar la consulta y convertir los resultados a JSON
