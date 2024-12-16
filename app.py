@@ -434,3 +434,35 @@ async def detalle_de_aportes(aporte_id: int):
     
     finally:
         conn.close()
+
+
+# Endpoint pool de aportes por grupo
+@app.get("/pool/{group_id}", tags=["Consultas | Macena DB"])
+async def pool_de_aportes(group_id: int):
+    contraseña = load_password()
+
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+    # Definir la consulta SQL
+    query = f"""
+    SELECT DISTINCT(A.fecha) AS UltimoPool, A.resultado AS Resultado, R.rg_nombre, R.parametros, R.Acumular FROM ReglasComercialesLog AS A
+    LEFT JOIN benef AS B ON A.ben_gr_id = B.ben_gr_id
+    LEFT JOIN ReglasComerciales AS R ON A.rg_id = R.rg_id
+    WHERE R.rgProc_id IN (8,11) AND A.Operacion = 'I' AND B.ben_gr_id = {group_id}
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+    
+    finally:
+        conn.close()
