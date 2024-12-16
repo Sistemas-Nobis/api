@@ -18,7 +18,7 @@ import string
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="3.3.5",
+    version="3.5.6",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -438,7 +438,7 @@ async def detalle_de_aportes(aporte_id: int):
 
 # Endpoint pool de aportes por grupo
 @app.get("/pool/{group_id}", tags=["Consultas | Macena DB"])
-async def pool_de_aportes(group_id: int):
+async def pool_de_aportes_log(group_id: int):
     contraseña = load_password()
 
     try:
