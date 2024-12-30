@@ -384,10 +384,11 @@ async def forma_de_pago_y_bonificaciones(dni: int):
 
     # Definir la consulta SQL
     query = f"""
-    SELECT A.agecta_id, B.ben_gr_id, A.doc_id, F.fpago_nombre, C.peri_hasta, C.porcentaje FROM agentescta AS A
+    SELECT A.agecta_id, B.ben_gr_id, A.doc_id, F.fpago_nombre, C.peri_hasta, C.porcentaje, C.BonficaRec_obs, R.rg_id, R.rg_nombre, R.rg_descrip FROM agentescta AS A
     LEFT JOIN formapago AS F ON A.fpago_id = F.fpago_id
     LEFT JOIN benefagecta AS B ON A.agecta_id = B.agecta_id
     LEFT JOIN BonificaRecargoBenef AS C ON B.ben_gr_id = C.ben_gr_id
+	LEFT JOIN ReglasComerciales AS R ON C.rg_id = R.rg_id
     WHERE A.doc_id = {dni}
     ORDER BY C.peri_hasta DESC
     """
