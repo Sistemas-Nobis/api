@@ -18,7 +18,7 @@ import string
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="3.5.6",
+    version="3.5.9",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -469,7 +469,7 @@ async def pool_de_aportes_log(group_id: int):
         conn.close()
 
 
-# Endpoint pool de aportes por grupo
+# Endpoint localidades
 @app.get("/localidades", tags=["Taxo. | Proyecto aplicativo"])
 async def lista_de_localidades():
     contraseña = load_password()
@@ -481,7 +481,7 @@ async def lista_de_localidades():
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
 
     # Definir la consulta SQL
-    query = f"SELECT * FROM localidades"
+    query = f"""SELECT * FROM localidades"""
     
     # Ejecutar la consulta y convertir los resultados a JSON
     try:
