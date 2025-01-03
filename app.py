@@ -489,7 +489,7 @@ async def lista_de_localidades():
 
     try:
         # Conexión a la base de datos
-        conn = pyodbc.connect(
+        conne = pyodbc.connect(
             fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes"
         )
     except pyodbc.InterfaceError:
@@ -500,11 +500,11 @@ async def lista_de_localidades():
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
 
     # Definir la consulta SQL
-    query = "SELECT * FROM localidades"
+    querys = "SELECT * FROM localidades"
 
     try:
         # Ejecutar la consulta y convertir los resultados a JSON
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql(querys, conne)
         result_json = df.to_json(orient="records", date_format="iso")
         return json.loads(result_json)
     except ValueError as e:
@@ -512,4 +512,4 @@ async def lista_de_localidades():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al ejecutar la consulta SQL: {e}")
     finally:
-        conn.close()
+        conne.close()
