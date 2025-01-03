@@ -500,7 +500,8 @@ async def lista_de_localidades():
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
 
     # Definir la consulta SQL
-    querys = "SELECT * FROM localidades"
+    querys = """SELECT L.loc_id, L.loc_nombre, L.prov_id, L.cod_postal, P.prov_nombre FROM localidades AS L
+    LEFT JOIN provincias AS P ON L.prov_id = P.prov_id"""
 
     try:
         # Ejecutar la consulta y convertir los resultados a JSON
