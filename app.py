@@ -38,7 +38,7 @@ async def exception_handling_middleware(request, call_next):
     except HTTPException as http_exc:
         return JSONResponse(status_code=http_exc.status_code, content={"detail": http_exc.detail})
     except Exception as exc:
-        return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+        return JSONResponse(status_code=500, content={"Detalle middleware": f"Internal Server Error: {exc}"})
 
 # Endpoint para obtener la contraseña actual
 @app.get("/obtener_contrasena", tags=["Contraseña | Macena DB"])
