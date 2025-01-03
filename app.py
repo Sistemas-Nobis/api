@@ -405,6 +405,7 @@ async def forma_de_pago_y_bonificaciones(dni: int):
     finally:
         conn.close()
 
+
 # Endpoint asociacion de aportes y subdivisiones para Widget de retención
 @app.get("/desglose_aportes/{aporte_id}", tags=["Consultas | Macena DB"])
 async def detalle_de_aportes(aporte_id: int):
@@ -475,22 +476,28 @@ async def lista_de_localidades():
     contraseña = load_password()
 
     try:
-        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
-
+        # Conexión a la base de datos
+        conn = pyodbc.connect(
+            fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes"
+        )
+    except pyodbc.InterfaceError:
+        raise HTTPException(status_code=500, detail="Error de conexión: No se pudo encontrar el controlador ODBC.")
+    except pyodbc.OperationalError:
+        raise HTTPException(status_code=500, detail="Error de conexión: No se pudo conectar al servidor.")
     except pyodbc.Error as e:
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
 
     # Definir la consulta SQL
-    query = f"""SELECT * FROM localidades"""
-    
-    # Ejecutar la consulta y convertir los resultados a JSON
+    query = "SELECT * FROM localidades"
+
     try:
-        df = pd.read_sql_query(query, conn)
+        # Ejecutar la consulta y convertir los resultados a JSON
+        df = pd.read_sql(query, conn)
         result_json = df.to_json(orient="records", date_format="iso")
         return json.loads(result_json)
-    
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar los resultados: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
-    
+        raise HTTPException(status_code=500, detail=f"Error al ejecutar la consulta SQL: {e}")
     finally:
         conn.close()
