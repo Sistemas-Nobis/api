@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="4.0.0",
+    version="4.2.1",
 )
 
 # Definir un modelo para la entrada de la nueva contraseña
@@ -172,16 +172,18 @@ async def ultimos_aportes_cuenta_corriente(dni: int):
 
     # Definir la consulta SQL
     query = f"""
-    DECLARE @PeriodoActual INT = CAST(FORMAT(GETDATE(), 'yyyyMM') AS INT);
-    SELECT C.comp_id, A.numero, C.comp_peri, C.comp_total, C.comp_fecha FROM benef AS A
+    DECLARE @FechaLimite DATE = DATEADD(MONTH, -3, GETDATE());
+    SELECT 
+    C.comp_id, A.numero, C.comp_peri, C.comp_total, C.comp_fecha 
+    FROM benef AS A
     LEFT JOIN benefagecta AS B ON A.ben_gr_id = B.ben_gr_id
     LEFT JOIN compctacte AS C ON B.agecta_id = C.agecta_id
     WHERE 
         C.tcomp_id = 15 
         AND C.estado = 'N' 
-        AND A.numero = {dni} 
-        AND C.comp_peri >= @PeriodoActual - 2
-    ORDER BY C.comp_fecha DESC
+        AND A.numero = {dni}
+        AND C.comp_fecha >= @FechaLimite
+    ORDER BY C.comp_fecha DESC;
     """
     
     # Ejecutar la consulta y convertir los resultados a JSON
@@ -512,3 +514,34 @@ async def localidades(id: int):
             conn.close()
     else:
         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
+
+
+# Endpoint con consultas de aportes de cuenta corriente para Widget de retención
+@app.get("/dni_agecta/{grupo_id}", tags=["Consultas | Macena DB"])
+async def dni_de_agente_de_cuenta(grupo_id: int):
+    contraseña = load_password()
+
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+    # Definir la consulta SQL
+    query = f"""
+    SELECT A.ben_gr_id, B.agecta_id, B.doc_id FROM benefagecta AS A
+    LEFT JOIN agentescta AS B ON A.agecta_id = B.agecta_id
+    WHERE A.ben_gr_id = {grupo_id}
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+    
+    finally:
+        conn.close()
