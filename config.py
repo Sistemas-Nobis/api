@@ -1,12 +1,17 @@
 # config.py
 import json
-from fastapi import FastAPI, Depends
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 from fastapi_cache.decorator import cache
 import requests
+from datetime import datetime, timedelta, timezone
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi import Header, HTTPException
 
 PASSWORD_FILE = "password.json"
+
+SECRET_KEY = "XwKDmSfchJTSo2ulEJAVGFpgk1rGjXTCR6Duu8xdUCjEzwFjz7shVsBVAm9Sxu83"  # Clave secreta para firmar los tokens (¡NUNCA la expongas en tu código!)
+ALGORITHM = "HS256"  # Algoritmo de encriptación
+ACCESS_TOKEN_EXPIRE_MINUTES = 20160  # Duración del token en minutos
 
 def load_password():
     """Cargar la contraseña desde un archivo JSON."""
@@ -22,6 +27,42 @@ def update_password(new_password):
     """Actualizar la contraseña en el archivo JSON."""
     with open(PASSWORD_FILE, 'w') as f:
         json.dump({"password": new_password}, f)
+
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Función para verificar una contraseña
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+# Función para hashear una contraseña
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+# Función para generar un token JWT
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return token
+
+# Función para decodificar y validar un token
+def decode_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        return None
+
+
+# Dependencia para verificar la secret key en el header
+async def verify_secret_key(x_secret_key: str = Header(None)):
+    if x_secret_key != SECRET_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="No está autorizado.",
+        )
 
 
 # Función para actualizar y obtener el token desde la API de GECROS

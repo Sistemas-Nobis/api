@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, status, Request, Security
 from pydantic import BaseModel
 from config import load_password, update_password
 from funciones import obtener_token_gecros
@@ -11,16 +11,54 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 import pyodbc
 import pandas as pd
 import json
-import pymysql
 import random
 import string
 from fastapi.responses import JSONResponse
+from database import init_db, get_db_connection
+from fastapi.security import OAuth2PasswordBearer
+from usuarios import router as users_router, decode_token, permisos_rol
+from config import verify_secret_key
+from models import *
+from datetime import datetime
 
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="4.2.1",
+    version="5.0.0",
 )
+
+# Register authentication routes
+app.include_router(users_router)
+
+# Configure OAuth2 with security scopes
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="token",
+    scopes={
+        "admin": "Full access",
+        "cuoma": "Acceso de cuoma"
+    }
+)
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
+
+# Dependencia para verificar permisos por rol
+async def check_permissions(request: Request, current_user: dict = Depends(get_current_user)):
+    role = current_user.get("role")
+    endpoint = request.url.path  # Obtiene la ruta solicitada automáticamente
+    
+    # Verificar si el rol tiene permisos para acceder al endpoint
+    if "*" not in permisos_rol[role] and endpoint not in permisos_rol[role]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permiso a esta ruta.")
+    
+    return current_user
 
 # Definir un modelo para la entrada de la nueva contraseña
 class PasswordUpdate(BaseModel):
@@ -74,7 +112,7 @@ async def ultimos_aportes(dni: int):
 
     # Definir la consulta SQL
     query = f"""
-    DECLARE @PeriodoActual INT = CAST(FORMAT(GETDATE(), 'yyyyMM') AS INT);
+    DECLARE @FechaLimite DATE = DATEADD(MONTH, -3, GETDATE());
     SELECT DISTINCT
         A.fecha,
         A.emp_id,
@@ -87,9 +125,9 @@ async def ultimos_aportes(dni: int):
     LEFT JOIN
         benef AS B ON A.ben_id = B.ben_id
     WHERE
-        A.Periodo >= @PeriodoActual - 2
-        AND A.aporte > 1
+        A.aporte > 1
         AND B.numero = {dni}
+		AND A.fecha >= @FechaLimite
     ORDER BY
         A.Periodo DESC;
     """
@@ -263,31 +301,8 @@ async def descargar_boleta(id_ben: int, id_comp: int, token:str = Depends(obtene
         raise HTTPException(status_code=response_template.status_code, detail="Error al descargar el PDF")
     
 
-### ACORTADOR DE ENLACES / GENERADOR DE ALIAS ###
-
-# Configuración de la conexión a MySQL
-def get_db_connection():
-    return pymysql.connect(
-        host="10.2.0.7",
-        user="api",
-        password="nobisapi",
-        database="enlaces"
-    )
-
-
-# Inicialización de la base de datos
-def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS autorizaciones
-                      (alias VARCHAR(50) PRIMARY KEY, original_url TEXT)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS boletas
-                      (alias VARCHAR(50) PRIMARY KEY, original_url TEXT)''')
-    conn.commit()
-    cursor.close()
-    conn.close()
+# Iniciar conexion a MySQL
 init_db()
-
 
 # Generador de alias único
 def generate_unique_alias():
@@ -383,7 +398,6 @@ async def redireccionar(alias: str):
         return RedirectResponse(original_url)
     else:
         raise HTTPException(status_code=404, detail="Alias no encontrado")
-
 
 # Endpoint consulta de forma de pago y bonificaciones del afiliado
 @app.get("/fpago_bonif/{dni}", tags=["Consultas | Macena DB"])
@@ -547,3 +561,52 @@ async def dni_de_agente_de_cuenta(grupo_id: int):
     
     finally:
         conn.close()
+
+
+# Endpoint para actualizar los datos
+@app.put("/movfpago/update/{count}", tags=["Actualización | Macena DB"])
+async def actualizar_forma_de_pago(data: MovfPago, count: int, current_user: dict = Depends(check_permissions)):
+    if count == 1:
+    
+        usuario = 'CUOMA'
+        contraseña = load_password()
+        
+        try:
+            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+            cursor = conn.cursor()
+            
+            # Consulta SQL para realizar el UPDATE
+            update_query = f"""
+            UPDATE movfpago
+            SET age_id = ?, fpago_id = ?, movfp_desde = ?, movfp_hasta = ?, cbu = ?, vencimiento = ?, movfp_UsuModi = ?, movfp_fecmodi = ?
+            WHERE movfp_id = ?
+            """
+            
+            # Ejecutar la consulta
+            cursor.execute(
+                update_query,
+                data.age_id,
+                data.fpago_id,
+                data.movfp_desde,
+                data.movfp_hasta,
+                data.cbu,
+                data.vencimiento,
+                usuario,
+                datetime.now(),
+                data.movfp_id  # Cambia a la clave correcta si `movfp_id` es diferente
+            )
+            conn.commit()
+            
+            return {"message": "Actualización exitosa"}
+        
+        except pyodbc.Error as e:
+            raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+        
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al ejecutar la actualización: {e}")
+        
+        finally:
+            conn.close()
+
+    else:
+        raise HTTPException(status_code=505, detail=f"Error al ejecutar la actualización: {e}")
