@@ -578,7 +578,7 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, current_user: dic
             # Consulta SQL para realizar el UPDATE
             update_query = f"""
             UPDATE movfpago
-            SET age_id = ?, fpago_id = ?, movfp_desde = ?, movfp_hasta = ?, cbu = ?, vencimiento = ?, movfp_UsuModi = ?, movfp_fecmodi = ?
+            SET age_id = ?, fpago_id = ?, entfin_id = ?, movfp_desde = ?, movfp_hasta = ?, cbu = ?, numero = ?, vencimiento = ?, movfp_UsuModi = ?, movfp_fecmodi = ?
             WHERE movfp_id = ?
             """
             
@@ -587,9 +587,11 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, current_user: dic
                 update_query,
                 data.age_id,
                 data.fpago_id,
+                data.entfin_id,
                 data.movfp_desde,
                 data.movfp_hasta,
                 data.cbu,
+                data.numero,
                 data.vencimiento,
                 usuario,
                 datetime.now(),
