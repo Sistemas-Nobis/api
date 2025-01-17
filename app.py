@@ -24,7 +24,7 @@ from datetime import datetime
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="5.0.0",
+    version="5.2.0",
 )
 
 # Register authentication routes
@@ -238,7 +238,7 @@ async def ultimos_aportes_cuenta_corriente(dni: int):
 
 
 # Endpoint para descargar PDF de autorización
-@app.get("/descargar_autorizacion/{dni}-{id_aut}", tags=["Auxiliares | BOT WISE"])
+@app.get("/descargar_autorizacion/{dni}-{id_aut}", tags=["Auxiliares | BOT WISE"], dependencies=[Depends(verify_secret_key)])
 async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obtener_token_gecros)):
 
     #print(token)
@@ -275,7 +275,7 @@ async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obte
 
 
 # Endpoint para descargar PDF de boleta (comprobante de deuda)
-@app.get("/descargar_boleta/{id_ben}-{id_comp}", tags=["Auxiliares | BOT WISE"])
+@app.get("/descargar_boleta/{id_ben}-{id_comp}", tags=["Auxiliares | BOT WISE"], dependencies=[Depends(verify_secret_key)])
 async def descargar_boleta(id_ben: int, id_comp: int, token:str = Depends(obtener_token_gecros)):
 
     print(token)
@@ -309,7 +309,7 @@ def generate_unique_alias():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
 
 
-@app.post("/acortar_autorizacion", tags=["Auxiliares | BOT WISE"])
+@app.post("/acortar_autorizacion", tags=["Auxiliares | BOT WISE"], dependencies=[Depends(verify_secret_key)])
 async def acortar_autorizacion(original_url: str, alias: str = None):
     if not original_url:
         raise HTTPException(status_code=400, detail="Falta la URL original")
@@ -340,7 +340,7 @@ async def acortar_autorizacion(original_url: str, alias: str = None):
     return f"https://descargar.nobis.com.ar/{alias}"
 
 
-@app.post("/acortar_boleta", tags=["Auxiliares | BOT WISE"])
+@app.post("/acortar_boleta", tags=["Auxiliares | BOT WISE"], dependencies=[Depends(verify_secret_key)])
 async def acortar_boleta(original_url: str, alias: str = None):
     if not original_url:
         raise HTTPException(status_code=400, detail="Falta la URL original")
@@ -370,7 +370,7 @@ async def acortar_boleta(original_url: str, alias: str = None):
 
     return f"https://descargar.nobis.com.ar/{alias}"
 
-# Función para buscar el alias en todas las tablas
+# Función para buscar el alias en todas las tablas - Mover a utils
 def buscar_alias(alias: str):
     conn = get_db_connection()
     cursor = conn.cursor()
