@@ -238,7 +238,7 @@ async def ultimos_aportes_cuenta_corriente(dni: int):
 
 
 # Endpoint para descargar PDF de autorización
-@app.get("/descargar_autorizacion/{dni}-{id_aut}", tags=["Auxiliares | BOT WISE"], dependencies=[Depends(verify_secret_key)])
+@app.get("/descargar_autorizacion/{dni}-{id_aut}", tags=["Auxiliares | BOT WISE"])
 async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obtener_token_gecros)):
 
     #print(token)
@@ -275,7 +275,7 @@ async def descargar_autorizacion(dni: int, id_aut: int, token:str = Depends(obte
 
 
 # Endpoint para descargar PDF de boleta (comprobante de deuda)
-@app.get("/descargar_boleta/{id_ben}-{id_comp}", tags=["Auxiliares | BOT WISE"], dependencies=[Depends(verify_secret_key)])
+@app.get("/descargar_boleta/{id_ben}-{id_comp}", tags=["Auxiliares | BOT WISE"])
 async def descargar_boleta(id_ben: int, id_comp: int, token:str = Depends(obtener_token_gecros)):
 
     print(token)
