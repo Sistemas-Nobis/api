@@ -419,7 +419,6 @@ async def forma_de_pago_y_bonificaciones(dni: int):
     LEFT JOIN BonificaRecargoBenef AS C ON B.ben_gr_id = C.ben_gr_id
     LEFT JOIN ReglasComerciales AS R ON C.rg_id = R.rg_id
     WHERE A.doc_id = {dni}
-    AND CONVERT(VARCHAR(6), GETDATE(), 112) BETWEEN C.peri_desde AND C.peri_hasta
     ORDER BY C.peri_hasta DESC;
     """
     
