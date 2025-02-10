@@ -170,14 +170,21 @@ async def consulta_fecha_alta_y_patologias(dni: int):
             WHERE E.ben_id = C.ben_id
                 AND GETDATE() BETWEEN E.cobesp_desde AND E.cobesp_hasta
             FOR XML PATH(''), TYPE
-        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS cobertura_especial
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS cobertura_especial,
+        STUFF((
+            SELECT ', ' + CAST(E.id_tipocob AS NVARCHAR)
+            FROM coberturaesp AS E
+            WHERE E.ben_id = C.ben_id
+                AND GETDATE() BETWEEN E.cobesp_desde AND E.cobesp_hasta
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS id_cobertura_especial
     FROM benef C
-        LEFT JOIN BenefCambio B ON B.ben_id = C.ben_id
-        LEFT JOIN tipomov T ON T.tm_id = B.tcambio_id
+    LEFT JOIN BenefCambio B ON B.ben_id = C.ben_id
+    LEFT JOIN tipomov T ON T.tm_id = B.tcambio_id
     WHERE 
         T.tm_id = 2 AND C.doc_id = {dni}
     GROUP BY 
-        C.ben_id, C.doc_id, B.bc_fecha
+        C.ben_id, C.doc_id, B.bc_fecha;
     """
     
     # Ejecutar la consulta y convertir los resultados a JSON
