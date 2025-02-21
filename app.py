@@ -618,3 +618,44 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, current_user: dic
 
     else:
         raise HTTPException(status_code=505, detail=f"Error al ejecutar la actualización: {e}")
+
+
+# Endpoint con consultas de aportes de cuenta corriente para Widget de retención
+@app.get("/tipo_ben/{dni}", tags=["Consultas | Macena DB"])
+async def tipo_beneficiario(dni: int):
+    contraseña = load_password()
+
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+    # Definir la consulta SQL
+    query = f"""
+    WITH BenefcambioWithRowNumber AS (
+        SELECT ben_id, os_id, plan_id, tipoBen_id, ROW_NUMBER() OVER (PARTITION BY ben_id ORDER BY fecha_cambio DESC) AS rn  
+        FROM BenefCambio)  
+    SELECT DISTINCT
+        B.*,
+        C.tipoBen_id,
+        C.tipoBen_nom
+    FROM BenefcambioWithRowNumber D  
+    LEFT JOIN benef B ON D.ben_id = B.ben_id      
+    LEFT JOIN TiposBenef C ON D.tipoBen_id = C.tipoBen_id
+    LEFT OUTER JOIN benefagecta BA ON BA.ben_gr_id = B.ben_gr_id
+    LEFT OUTER JOIN v_consultapadronnobis V ON V.doc_id = B.doc_id  
+    WHERE D.rn = 1 AND B.numero = {dni}
+    """
+    
+    # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        result_json = df.to_json(orient="records", date_format="iso")
+        return json.loads(result_json)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+    
+    finally:
+        conn.close()
