@@ -24,7 +24,7 @@ from datetime import datetime
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="5.2.0",
+    version="5.7.0",
 )
 
 # Register authentication routes
@@ -659,3 +659,61 @@ async def tipo_beneficiario(dni: int):
     
     finally:
         conn.close()
+
+
+@app.post("/acortar_archivo", tags=["Auxiliares | BOT WISE"], dependencies=[Depends(verify_secret_key)])
+async def acortar_archivo(original_url: str, alias: str = None):
+    if not original_url:
+        raise HTTPException(status_code=400, detail="Falta la URL original")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Si no se proporciona un alias, genera uno único
+    if not alias:
+        alias = generate_unique_alias()
+        cursor.execute("SELECT alias FROM archivos WHERE alias = %s", (alias,))
+        while cursor.fetchone():
+            alias = generate_unique_alias()  # Reintenta hasta encontrar uno único
+
+    # Verifica si el alias ya existe en caso de que el usuario lo haya especificado
+    cursor.execute("SELECT alias FROM archivos WHERE alias = %s", (alias,))
+    if cursor.fetchone():
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="El alias ya existe")
+
+    # Inserta el enlace con el alias en la base de datos
+    cursor.execute("INSERT INTO archivos (alias, original_url) VALUES (%s, %s)", (alias, original_url))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return f"https://descargar.nobis.com.ar/{alias}"
+
+
+# Endpoint para descargar PDF de autorización
+@app.get("/descargar_recetas/{id}", tags=["Auxiliares | BOT WISE"])
+async def descargar_recetas(id: int, token:str = Depends(obtener_token_gecros)):
+
+    #print(token)
+
+    # Token y headers
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+
+    # URL para obtener el PDF
+    url_template = f"https://appmobile.nobissalud.com.ar/api/Archivo/get-img/{id}"
+    response_template = requests.get(url_template, headers=headers)
+
+    # Verifica que la respuesta fue exitosa
+    if response_template.status_code == 200:
+        pdf_bytes = io.BytesIO(response_template.content)
+        headers = {
+            'Content-Disposition': f'attachment; filename="Receta_{id}.pdf"'
+        }
+        return StreamingResponse(pdf_bytes, media_type="application/pdf", headers=headers)
+    else:
+        raise HTTPException(status_code=response_template.status_code, detail="Error al descargar el PDF")

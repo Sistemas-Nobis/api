@@ -18,6 +18,8 @@ def init_db():
                       (alias VARCHAR(50) PRIMARY KEY, original_url TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS boletas
                       (alias VARCHAR(50) PRIMARY KEY, original_url TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS archivos
+                      (alias VARCHAR(50) PRIMARY KEY, original_url TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS usuarios
                       (id INT AUTO_INCREMENT PRIMARY KEY, 
                       user VARCHAR(50) UNIQUE, 
