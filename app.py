@@ -720,8 +720,8 @@ async def descargar_recetas(id: int, token:str = Depends(obtener_token_gecros)):
     
 
 # Endpoint para descargar PDF de autorización
-@app.get("/contador/{id}", tags=["Auxiliares | Scripts Internos"])
-async def contador_interno(id: int, token:str = Depends(obtener_token_gecros)):
+@app.get("/contador/{id}", tags=["Auxiliares | Scripts Internos"], dependencies=[Depends(verify_secret_key)])
+async def contador_interno(id: int):
     
     if id == 1:
         conn = get_db_connection()
