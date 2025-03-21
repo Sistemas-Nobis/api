@@ -29,7 +29,8 @@ def init_db():
     cursor.execute('''CREATE TABLE IF NOT EXISTS contador (
                       id INT AUTO_INCREMENT PRIMARY KEY,
                       fuente TEXT,
-                      cuenta INT DEFAULT 0)''')
+                      cuenta INT DEFAULT 0,
+                      mes INT DEFAULT 0)''')
     conn.commit()
     cursor.close()
     conn.close()

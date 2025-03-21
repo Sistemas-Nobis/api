@@ -726,8 +726,19 @@ async def contador_interno(id: int, token:str = Depends(obtener_token_gecros)):
     if id == 1:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT cuenta FROM contador WHERE id = 1")
-        cuenta = cursor.fetchone()[0]
+
+        cursor.execute("SELECT cuenta, mes FROM contador WHERE id = 1")
+        cuenta, mes_guardado = cursor.fetchone()
+
+        mes_actual = datetime.now().month
+
+        #print(f"Mes guardado: {mes_guardado} - Mes actual: {mes_actual}")
+
+        # Si cambió el mes, reiniciar el contador
+        if mes_actual != mes_guardado:
+            cuenta = 0
+            cursor.execute("UPDATE contador SET cuenta = %s, mes = %s WHERE id = 1", (cuenta, mes_actual))
+            conn.commit()
 
         if cuenta < 4:
             nueva_cuenta = cuenta + 1
@@ -735,8 +746,8 @@ async def contador_interno(id: int, token:str = Depends(obtener_token_gecros)):
             conn.commit()
             cursor.close()
             conn.close()
-            return {"status": True, "contador": nueva_cuenta}
+            return {"status": True, "contador": nueva_cuenta, "mes": mes_actual}
         
-        return {"status": False, "mensaje": "Límite alcanzado"}
+        return {"status": False, "mensaje": "Límite alcanzado", "mes": mes_actual}
     else:
         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
