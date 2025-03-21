@@ -717,3 +717,26 @@ async def descargar_recetas(id: int, token:str = Depends(obtener_token_gecros)):
         return StreamingResponse(pdf_bytes, media_type="application/pdf", headers=headers)
     else:
         raise HTTPException(status_code=response_template.status_code, detail="Error al descargar el PDF")
+    
+
+# Endpoint para descargar PDF de autorización
+@app.get("/contador/{id}", tags=["Auxiliares | Scripts Internos"])
+async def contador_interno(id: int, token:str = Depends(obtener_token_gecros)):
+    
+    if id == 1:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT cuenta FROM contador WHERE id = 1")
+        cuenta = cursor.fetchone()[0]
+
+        if cuenta < 4:
+            nueva_cuenta = cuenta + 1
+            cursor.execute("UPDATE contador SET cuenta = %s WHERE id = 1", (nueva_cuenta,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return {"status": True, "contador": nueva_cuenta}
+        
+        return {"status": False, "mensaje": "Límite alcanzado"}
+    else:
+        raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
