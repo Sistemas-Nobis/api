@@ -553,7 +553,7 @@ async def dni_de_agente_de_cuenta(grupo_id: int):
     query = f"""
     SELECT A.ben_gr_id, B.agecta_id, B.doc_id FROM benefagecta AS A
     LEFT JOIN agentescta AS B ON A.agecta_id = B.agecta_id
-    WHERE A.ben_gr_id = {grupo_id}
+    WHERE A.ben_gr_id = {grupo_id} AND FORMAT(GETDATE(), 'yyyyMM') BETWEEN A.peri_desde AND A.peri_hasta
     """
     
     # Ejecutar la consulta y convertir los resultados a JSON
