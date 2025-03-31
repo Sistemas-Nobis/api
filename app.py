@@ -24,7 +24,7 @@ from datetime import datetime
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="5.7.0",
+    version="5.12.0",
 )
 
 # Register authentication routes
@@ -407,8 +407,8 @@ async def redireccionar(alias: str):
         raise HTTPException(status_code=404, detail="Alias no encontrado")
 
 # Endpoint consulta de forma de pago y bonificaciones del afiliado
-@app.get("/fpago_bonif/{dni}", tags=["Consultas | Macena DB"])
-async def forma_de_pago_y_bonificaciones(dni: int):
+@app.get("/fpago_bonif/{grupo_id}", tags=["Consultas | Macena DB"])
+async def forma_de_pago_y_bonificaciones(grupo_id: int):
     contraseña = load_password()
 
     try:
@@ -425,7 +425,7 @@ async def forma_de_pago_y_bonificaciones(dni: int):
     LEFT JOIN benefagecta AS B ON A.agecta_id = B.agecta_id
     LEFT JOIN BonificaRecargoBenef AS C ON B.ben_gr_id = C.ben_gr_id
     LEFT JOIN ReglasComerciales AS R ON C.rg_id = R.rg_id
-    WHERE A.doc_id = {dni}
+    WHERE B.ben_gr_id LIKE '%{grupo_id}%' AND FORMAT(GETDATE(), 'yyyyMM') BETWEEN B.peri_desde AND B.peri_hasta
     ORDER BY C.peri_hasta DESC;
     """
     
