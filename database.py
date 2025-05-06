@@ -31,6 +31,16 @@ def init_db():
                       fuente TEXT,
                       cuenta INT DEFAULT 0,
                       mes INT DEFAULT 0)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS movimientos_llamador (
+                        visita_id INT AUTO_INCREMENT PRIMARY KEY,
+                        evento TEXT,
+                        caso_id INT,
+                        caso_created_at DATETIME,
+                        contacto_id INT,
+                        actividad_id INT,
+                        actividad_type TEXT,
+                        sucursal TEXT)''')
+    #cursor.execute('''CREATE TABLE ''')
     conn.commit()
     cursor.close()
     conn.close()

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Llamador - Nobis Medical</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .header-title {
+            flex-grow: 1;
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #f1f1f1;
+        }
+        tr.nuevo {
+            background-color: #e1fbe1;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(0, 128, 0, 0.5);
+            animation: fadeShadow 5s forwards;
+        }
+        @keyframes fadeShadow {
+            0% { box-shadow: 0 0 10px rgba(0, 128, 0, 0.5); }
+            100% { box-shadow: none; }
+        }
+        audio {
+            display: none;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .status-connected {
+            background-color: #4CAF50;
+        }
+        .status-disconnected {
+            background-color: #f44336;
+        }
+        #btn-reconnect {
+            padding: 6px 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: none;
+        }
+        #btn-reconnect:hover {
+            background-color: #45a049;
+        }
+        #connection-text {
+            margin-right: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-container">
+        <div class="selector-container">
+            <span id="connection-status" class="status-indicator status-disconnected"></span>
+            <span id="connection-text">Desconectado</span>
+        </div>
+        <h1 class="header-title">Movimientos en tiempo real</h1>
+        <div style="width: 200px;"></div>
+    </div>
+
+    <button id="btn-activar-sonido">Activar sonido</button>
+    <audio id="sonido-alerta" src="/static/airport_call.mp3" preload="auto" type="audio/mpeg"></audio>
+
+    <table aria-label="Tabla de movimientos">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Fecha</th>
+                <th>Descripción</th>
+                <th>Box</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-cuerpo">
+            <!-- Nuevas filas aparecerán aquí -->
+        </tbody>
+    </table>
+
+    <button id="btn-reconnect">Reconectar</button>
+
+    <script>
+        const sonido = document.getElementById("sonido-alerta");
+        const cuerpoTabla = document.getElementById("tabla-cuerpo");
+        const connectionStatus = document.getElementById("connection-status");
+        const connectionText = document.getElementById("connection-text");
+        const btnReconnect = document.getElementById("btn-reconnect");
+
+        const idToSucursal = {
+            1: "casa central",
+            2: "sgo del estero",
+            3: "salta",
+            4: "catamarca"
+        };
+
+        let websocket = null;
+        let currentSucursal = null;
+
+        function updateConnectionStatus(status) {
+            if (status === "connected") {
+                connectionStatus.className = "status-indicator status-connected";
+                connectionText.textContent = "Conectado";
+                btnReconnect.style.display = "none";
+            } else {
+                connectionStatus.className = "status-indicator status-disconnected";
+                connectionText.textContent = "Desconectado";
+                btnReconnect.style.display = "inline-block";
+            }
+        }
+
+        function conectarWebSocket(sucursal) {
+            if (websocket) {
+                try {
+                    websocket.onclose = null;
+                    websocket.close();
+                } catch (e) {
+                    console.error("Error al cerrar WebSocket:", e);
+                }
+                websocket = null;
+            }
+
+            try {
+                console.log(`Conectando a WebSocket para sucursal: ${sucursal}`);
+                websocket = new WebSocket(`ws://${location.host}/ws/${encodeURIComponent(sucursal.toLowerCase())}`);
+
+                websocket.onopen = () => {
+                    console.log(`Conectado al WebSocket para sucursal: ${sucursal}`);
+                    updateConnectionStatus("connected");
+                    websocket.send("keep-alive");
+                    cuerpoTabla.innerHTML = '';
+                    currentSucursal = sucursal;
+                };
+
+                websocket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    const filaAnterior = cuerpoTabla.querySelector('tr.nuevo');
+                    if (filaAnterior) filaAnterior.classList.remove('nuevo');
+
+                    const fila = document.createElement("tr");
+                    fila.classList.add("nuevo");
+                    fila.innerHTML = `
+                        <td>${data.name}</td>
+                        <td>${data.fecha}</td>
+                        <td>${data.descripcion || ''}</td>
+                        <td>${data.box}</td>
+                    `;
+                    cuerpoTabla.prepend(fila);
+
+                    try {
+                        sonido.pause();
+                        sonido.currentTime = 0;
+                        sonido.play().catch(err => console.warn("Audio no pudo reproducirse:", err));
+                    } catch (error) {
+                        console.warn("Error al reproducir sonido:", error);
+                    }
+
+                    const filas = cuerpoTabla.querySelectorAll("tr");
+                    if (filas.length > 5) filas[5].remove();
+                };
+
+                websocket.onclose = () => {
+                    console.log("WebSocket desconectado.");
+                    updateConnectionStatus("disconnected");
+                };
+
+                websocket.onerror = (err) => {
+                    console.error("Error en WebSocket:", err);
+                    updateConnectionStatus("disconnected");
+                };
+
+            } catch (error) {
+                console.error("Error al crear WebSocket:", error);
+                updateConnectionStatus("disconnected");
+            }
+        }
+
+        function obtenerIdDesdeURL() {
+            const partes = window.location.pathname.split('/');
+            return parseInt(partes[partes.length - 1]);
+        }
+
+        const btnActivarSonido = document.getElementById("btn-activar-sonido");
+
+        btnActivarSonido.addEventListener("click", function () {
+            sonido.play().then(() => {
+                sonido.pause();
+                sonido.currentTime = 0;
+                btnActivarSonido.style.display = "none";  // Oculta el botón tras activación
+            }).catch(err => {
+                console.warn("No se pudo activar el sonido:", err);
+            });
+        });
+
+        window.addEventListener('load', function () {
+            const id = obtenerIdDesdeURL();
+            const sucursal = idToSucursal[id];
+
+            if (sucursal) {
+                conectarWebSocket(sucursal);
+            } else {
+                alert("Sucursal no válida o no configurada para este ID.");
+            }
+        });
+
+        btnReconnect.addEventListener("click", function () {
+            if (currentSucursal) {
+                conectarWebSocket(currentSucursal);
+            }
+        });
+    </script>
+</body>
+</html>

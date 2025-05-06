@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Pre-Llamador - Nobis Medical</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <!-- Agrego la fuente Inter desde Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+    <style>
+        /* Reset básico y tipografía */
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #fff;
+            color: #333;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Modo oscuro */
+        body.dark-mode {
+            background-color: #121212;
+            color: #eee;
+        }
+
+        h1, h2, h3 {
+            margin-top: 0;
+        }
+
+        /* Estilo para el botón de modo oscuro */
+        #darkModeToggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #0066cc;
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        #darkModeToggle:hover {
+            background: #004999;
+        }
+
+        /* Estilos generales */
+        .hidden {
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        /* Colores en modo oscuro para la tabla */
+        body.dark-mode table {
+            border-color: #444;
+        }
+        body.dark-mode th {
+            background-color: #222;
+        }
+        body.dark-mode td {
+            border-color: #444;
+        }
+
+        /* Encabezado y componentes */
+        h1 {
+            font-weight: 700;
+        }
+        h2, h3 {
+            font-weight: 500;
+        }
+
+        /* Estilo para panel de configuración */
+        .settings-panel {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            transition: background-color 0.3s;
+        }
+
+        body.dark-mode .settings-panel {
+            background-color: #2c2c2c;
+        }
+
+        .settings-active {
+            background-color: #e0f7e0;
+            border: 1px solid #c3e6c3;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        input[type="text"], select {
+            width: calc(50% - 20px);
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background-color: #004999;
+        }
+
+        /* Filtros y botones */
+        .filtros {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+        }
+
+        body.dark-mode .filtros {
+            background-color: #333;
+        }
+
+        .filtros label {
+            margin-right: 15px;
+        }
+
+        /* Estado de WebSocket indicator */
+        .status-indicator {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            padding: 8px 14px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+        .status-connected {
+            background-color: #c3e6c3;
+            color: #2a6a2a;
+        }
+        .status-disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Estilo para registros llamando */
+        .registro-llamado {
+            background-color: #ff0000;
+        }
+
+        /* Animacion para nuevos registros */
+        @keyframes highlight {
+            0% { background-color: #ffffcc; }
+            100% { background-color: transparent; }
+        }
+
+        .new-record {
+            animation: highlight 2s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <!-- Botón para modo oscuro -->
+    <button id="darkModeToggle">Modo Oscuro</button>
+    <h1>Pre-Llamador</h1>
+
+    <div id="settingsPanel" class="settings-panel">
+        <h2>Configuración</h2>
+        <form id="configForm" method="post" action="/pre-llamador/1">
+            <label for="box">Box:</label>
+            <input type="text" id="boxInput" name="box" required>
+
+            <label for="sucursal">Sucursal:</label>
+            <select id="sucursalInput" name="sucursal" required>
+                <option value="casa central">Casa Central</option>
+                <option value="Catamarca">Catamarca</option>
+                <option value="Salta">Salta</option>
+                <option value="Sgo del Estero">Sgo del Estero</option>
+                <option value="SZN">Zona Norte</option>
+            </select>
+
+            <button type="submit">Guardar Configuración</button>
+        </form>
+    </div>
+
+    <div id="activeSettings" class="settings-panel settings-active hidden">
+        <h3>Configuración Actual</h3>
+        <p>Box: <span id="currentBox"></span> | Sucursal: <span id="currentSucursal"></span></p>
+        <button id="changeSettings">Cambiar</button>
+    </div>
+
+    <h2>Registros disponibles</h2>
+    
+    <div class="filtros">
+        <label>
+            <input type="radio" name="filtro" value="todos" checked> Mostrar todos
+        </label>
+        <label>
+            <input type="radio" name="filtro" value="pendientes"> Solo pendientes
+        </label>
+        <label>
+            <input type="radio" name="filtro" value="llamados"> Solo llamados
+        </label>
+    </div>
+    
+    <form id="llamarForm" method="post" action="/llamar/1">
+        <input type="hidden" id="boxHidden" name="box">
+        <input type="hidden" id="sucursalHidden" name="sucursal">
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Dni</th>
+                    <th>Fecha</th>
+                    <th>Sucursal</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="registrosTabla">
+                {% for r in registros %}
+                <tr 
+                    data-estado="{% if r.llamado %}llamado{% else %}pendiente{% endif %}" 
+                    data-sucursal="{{ r.sucursal }}"
+                    {% if r.llamado or r.bloqueado %}class="registro-llamado"{% endif %}
+                >
+                    <td>{{ r.nombre }}</td>
+                    <td>{{ r.dni }}</td>
+                    <td>{{ r.fecha }}</td>
+                    <td>{{ r.sucursal }}</td>
+                    <td>
+                        {% if r.llamado or r.bloqueado %}
+                            <span class="box-info">Llamado en Box: {{ r.box_llamado }}</span>
+                        {% else %}
+                            Pendiente
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not r.llamado and not r.bloqueado %}
+                            <button name="registro_id" value="{{ r.id }}" type="submit" class="btn-llamar">Llamar</button>
+                        {% else %}
+                            <span style="color:#000000; font-weight:bold;">Ya llamado </span>
+                            <form method="post" action="/repetir-llamado/1" style="display:inline;" class="form-repetir" id="form-repetir-{{ r.id }}">
+                                <input type="hidden" name="registro_id" value="{{ r.id }}">
+                                <input type="hidden" name="box" value="{{ r.box_llamado }}">
+                                <input type="hidden" name="sucursal" value="{{ r.sucursal }}">
+                                <button type="submit" class="btn-repetir">Repetir</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+
+    <!-- Indicador de estado de WebSocket -->
+    <div id="wsStatus" class="status-indicator status-disconnected">Desconectado</div>
+    
+    <script>
+        let socket = null;
+
+        const toggleDarkModeBtn = document.getElementById('darkModeToggle');
+
+        // Verificar si hay preferencia guardada
+        if (localStorage.getItem('darkMode') === 'true') {
+        document.body.classList.add('dark-mode');
+        toggleDarkModeBtn.textContent = 'Modo Claro';
+        } else {
+        toggleDarkModeBtn.textContent = 'Modo Oscuro';
+        }
+
+        toggleDarkModeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('darkMode', isDark);
+        toggleDarkModeBtn.textContent = isDark ? 'Modo Claro' : 'Modo Oscuro';
+        });
+        
+        // Verificar si ya hay valores guardados
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedBox = localStorage.getItem('boxValue');
+            const savedSucursal = localStorage.getItem('sucursalValue');
+            
+            if (savedBox && savedSucursal) {
+                // Mostrar la configuración activa
+                document.getElementById('currentBox').textContent = savedBox;
+                document.getElementById('currentSucursal').textContent = savedSucursal;
+                document.getElementById('settingsPanel').classList.add('hidden');
+                document.getElementById('activeSettings').classList.remove('hidden');
+                
+                // Establecer los valores ocultos en el formulario de llamada
+                document.getElementById('boxHidden').value = savedBox;
+                document.getElementById('sucursalHidden').value = savedSucursal;
+                
+                // Aplicar filtro por sucursal automáticamente
+                filtrarPorSucursal(savedSucursal);
+                
+                // Conectar WebSocket
+                conectarWebSocket(savedSucursal);
+            }
+            
+            // Configurar filtros
+            const filtroRadios = document.querySelectorAll('input[name="filtro"]');
+            filtroRadios.forEach(radio => {
+                radio.addEventListener('change', filtrarRegistros);
+            });
+
+            // Preparar todos los botones de repetir para que usen los valores correctos
+            document.querySelectorAll('.btn-repetir').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    // Asegurar que el formulario padre tenga los campos correctos
+                    const form = this.closest('form');
+                    
+                    // Si no hay un valor explícito de box en el formulario, usar el guardado
+                    if (!form.querySelector('input[name="box"]').value) {
+                        const savedBox = localStorage.getItem('boxValue');
+                        if (savedBox) {
+                            form.querySelector('input[name="box"]').value = savedBox;
+                        }
+                    }
+                    
+                    // Asegurar que la sucursal esté definida
+                    if (!form.querySelector('input[name="sucursal"]').value) {
+                        const sucursalCell = this.closest('tr').querySelector('td:nth-child(4)').textContent;
+                        form.querySelector('input[name="sucursal"]').value = sucursalCell;
+                    }
+                });
+            });
+
+            // Manejar la actualización dinámica cuando se añaden nuevos registros ya llamados
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length) {
+                        // Revisar si hay nuevos formularios de repetir
+                        document.querySelectorAll('.form-repetir').forEach(form => {
+                            // Solo procesar formularios que no tengan el evento ya agregado
+                            if (!form.dataset.processed) {
+                                form.dataset.processed = "true";
+                                prepararFormularioRepetir(form);
+                            }
+                        });
+                    }
+                });
+            });
+
+            // Configurar el observador para todo el contenido de la tabla
+            observer.observe(document.getElementById('registrosTabla'), {
+                childList: true,
+                subtree: true
+            });
+            
+            // Procesar formularios existentes
+            document.querySelectorAll('.form-repetir').forEach(prepararFormularioRepetir);
+            
+            // Función para preparar cada formulario
+            function prepararFormularioRepetir(form) {
+                // Asegurar que los campos tengan valores correctos
+                const registroId = form.querySelector('input[name="registro_id"]').value;
+                const boxInput = form.querySelector('input[name="box"]');
+                const sucursalInput = form.querySelector('input[name="sucursal"]');
+                
+                // Si no hay box definido en el formulario, usar el guardado en localStorage
+                if (!boxInput.value) {
+                    const savedBox = localStorage.getItem('boxValue');
+                    if (savedBox) {
+                        boxInput.value = savedBox;
+                    }
+                }
+                
+                // Asegurarse que el formulario tenga un evento submit para manejar el envío
+                form.addEventListener('submit', function(e) {
+                    // No prevenir el envío, pero verificar que tenga los campos necesarios
+                    if (!boxInput.value || !sucursalInput.value) {
+                        e.preventDefault();
+                        alert('Error: No se puede repetir el llamado sin box o sucursal');
+                    }
+                    
+                    // También puede ser útil para debugging
+                    console.log(`Repitiendo llamado para registro ${registroId} en box ${boxInput.value}, sucursal ${sucursalInput.value}`);
+                });
+            }
+
+        });
+
+        // Función para actualizar registros después de una llamada repetida
+        function actualizarDespuesDeRepetir(registroId, box) {
+            // Encuentra la fila del registro
+            const fila = document.querySelector(`tr[data-id="${registroId}"]`);
+            if (fila) {
+                // Actualiza la información del box si es necesario
+                const celdaEstado = fila.querySelector('td:nth-child(5)');
+                if (celdaEstado) {
+                    const spanBox = celdaEstado.querySelector('.box-info');
+                    if (spanBox) {
+                        spanBox.textContent = `Llamado en Box: ${box}`;
+                    }
+                }
+                
+                // También actualizar el valor en el formulario de repetir
+                const formRepetir = document.getElementById(`form-repetir-${registroId}`);
+                if (formRepetir) {
+                    const boxInput = formRepetir.querySelector('input[name="box"]');
+                    if (boxInput) {
+                        boxInput.value = box;
+                    }
+                }
+            }
+        }
+        // Guardar la configuración cuando se envía el formulario
+        document.getElementById('configForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const boxValue = document.getElementById('boxInput').value;
+            const sucursalValue = document.getElementById('sucursalInput').value;
+            
+            if (boxValue && sucursalValue) {
+                // Cerrar WebSocket anterior si existe
+                if (socket) {
+                    socket.close();
+                }
+                
+                // Guardar en localStorage
+                localStorage.setItem('boxValue', boxValue);
+                localStorage.setItem('sucursalValue', sucursalValue);
+                
+                // Actualizar la interfaz
+                document.getElementById('currentBox').textContent = boxValue;
+                document.getElementById('currentSucursal').textContent = sucursalValue;
+                document.getElementById('settingsPanel').classList.add('hidden');
+                document.getElementById('activeSettings').classList.remove('hidden');
+                
+                // Establecer los valores ocultos en el formulario de llamada
+                document.getElementById('boxHidden').value = boxValue;
+                document.getElementById('sucursalHidden').value = sucursalValue;
+                
+                // Aplicar filtro por sucursal
+                filtrarPorSucursal(sucursalValue);
+                
+                // Conectar nuevo WebSocket para la sucursal seleccionada
+                conectarWebSocket(sucursalValue);
+            }
+        });
+
+        // Cambiar la configuración
+        document.getElementById('changeSettings').addEventListener('click', function() {
+            // Mostrar el panel de configuración
+            document.getElementById('settingsPanel').classList.remove('hidden');
+            document.getElementById('activeSettings').classList.add('hidden');
+            
+            // Prellenar con los valores actuales
+            document.getElementById('boxInput').value = localStorage.getItem('boxValue') || '';
+            document.getElementById('sucursalInput').value = localStorage.getItem('sucursalValue') || '';
+        });
+        
+        // Filtrar registros según estado (pendiente/llamado)
+        function filtrarRegistros() {
+            const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
+            const sucursalActual = localStorage.getItem('sucursalValue');
+            const filas = document.querySelectorAll('#registrosTabla tr');
+            
+            filas.forEach(fila => {
+                const estado = fila.getAttribute('data-estado');
+                const sucursalFila = fila.getAttribute('data-sucursal');
+                
+                // Solo mostrar registros de la sucursal actual
+                if (sucursalActual && sucursalFila !== sucursalActual) {
+                    fila.style.display = 'none';
+                    return;
+                }
+                
+                if (filtroSeleccionado === 'todos') {
+                    fila.style.display = '';
+                } else if (filtroSeleccionado === 'pendientes' && estado === 'pendiente') {
+                    fila.style.display = '';
+                } else if (filtroSeleccionado === 'llamados' && estado === 'llamado') {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            });
+        }
+        
+        // Filtrar registros por sucursal seleccionada
+        function filtrarPorSucursal(sucursal) {
+            const filas = document.querySelectorAll('#registrosTabla tr');
+            
+            filas.forEach(fila => {
+                const sucursalFila = fila.getAttribute('data-sucursal');
+                
+                if (sucursal && sucursalFila !== sucursal) {
+                    fila.style.display = 'none';
+                } else {
+                    // Aplicar también el filtro de estado si está seleccionado
+                    const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
+                    const estado = fila.getAttribute('data-estado');
+                    
+                    if (filtroSeleccionado === 'todos') {
+                        fila.style.display = '';
+                    } else if (filtroSeleccionado === 'pendientes' && estado === 'pendiente') {
+                        fila.style.display = '';
+                    } else if (filtroSeleccionado === 'llamados' && estado === 'llamado') {
+                        fila.style.display = '';
+                    } else {
+                        fila.style.display = 'none';
+                    }
+                }
+            });
+        }
+        
+        // Conectar al WebSocket
+        function conectarWebSocket(sucursal) {
+            // Cerrar la conexión anterior si existe
+            if (socket) {
+                socket.close();
+            }
+            
+            // Crear nueva conexión WebSocket para la sucursal seleccionada
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/prellamador/${sucursal.toLowerCase()}`;
+            socket = new WebSocket(wsUrl);
+            
+            // Actualizar indicador de estado
+            const statusIndicator = document.getElementById('wsStatus');
+            
+            socket.onopen = function(e) {
+                console.log("Conexión WebSocket establecida");
+                statusIndicator.textContent = "Conectado";
+                statusIndicator.className = "status-indicator status-connected";
+            };
+            
+            socket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                console.log("Datos recibidos:", data);
+                
+                if (data.action === "nuevo_registro") {
+                    agregarNuevoRegistro(data.registro);
+                } else if (data.action === "actualizar_registro") {
+                    actualizarRegistro(data.registro);
+                }
+            };
+            
+            socket.onclose = function(event) {
+                console.log("Conexión WebSocket cerrada");
+                statusIndicator.textContent = "Desconectado";
+                statusIndicator.className = "status-indicator status-disconnected";
+                
+                // Intentar reconectar después de 5 segundos
+                setTimeout(function() {
+                    conectarWebSocket(sucursal);
+                }, 5000);
+            };
+            
+            socket.onerror = function(error) {
+                console.error("Error en WebSocket:", error);
+                statusIndicator.textContent = "Error de conexión";
+                statusIndicator.className = "status-indicator status-disconnected";
+            };
+        }
+        
+        // Agregar un nuevo registro a la tabla
+        function agregarNuevoRegistro(registro) {
+            const tablaBody = document.getElementById('registrosTabla');
+            const sucursalActual = localStorage.getItem('sucursalValue');
+            
+            // Solo procesar si pertenece a la sucursal actual
+            if (sucursalActual && registro.sucursal !== sucursalActual) {
+                return;
+            }
+            
+            // Evitar duplicados verificando si ya existe un registro con el mismo ID
+            const registroExistente = document.querySelector(`tr[data-id="${registro.id}"]`);
+            if (registroExistente) {
+                return;
+            }
+            
+            // Crear nueva fila
+            const nuevaFila = document.createElement('tr');
+            nuevaFila.setAttribute('data-estado', 'pendiente');
+            nuevaFila.setAttribute('data-sucursal', registro.sucursal);
+            nuevaFila.setAttribute('data-id', registro.id);
+            nuevaFila.className = 'new-record';
+            
+            // Contenido de la fila
+            nuevaFila.innerHTML = `
+                <td>${registro.nombre}</td>
+                <td>${registro.dni}</td>
+                <td>${registro.fecha}</td>
+                <td>${registro.sucursal}</td>
+                <td>Pendiente</td>
+                <td>
+                    <button name="registro_id" value="${registro.id}" type="submit" class="btn-llamar">Llamar</button>
+                </td>
+            `;
+            
+            // Aplicar filtros actuales
+            const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
+            if (filtroSeleccionado === 'llamados') {
+                nuevaFila.style.display = 'none';
+            }
+            
+            // Añadir a la tabla
+            tablaBody.prepend(nuevaFila);
+        }
+        
+        // Actualizar un registro existente (ej: cuando fue llamado)
+        function actualizarRegistro(registro) {
+            const fila = document.querySelector(`tr[data-id="${registro.id}"]`);
+            if (!fila) return;
+            
+            // Actualizar estado
+            fila.setAttribute('data-estado', registro.llamado ? 'llamado' : 'pendiente');
+            if (registro.llamado || registro.bloqueado) {
+                fila.classList.add('registro-llamado');
+                
+                // Actualizar contenido de la fila
+                const celdas = fila.querySelectorAll('td');
+                celdas[4].innerHTML = `<span class="box-info">Llamado en Box: ${registro.box_llamado}</span>`;
+                celdas[5].innerHTML = `<button disabled class="btn-deshabilitado">Ya llamado</button>`;
+                
+                // Aplicar filtros
+                const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
+                if (filtroSeleccionado === 'pendientes') {
+                    fila.style.display = 'none';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
