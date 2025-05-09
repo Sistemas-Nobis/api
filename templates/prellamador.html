@@ -201,7 +201,6 @@
                 <option value="Catamarca">Catamarca</option>
                 <option value="Salta">Salta</option>
                 <option value="Sgo del Estero">Sgo del Estero</option>
-                <option value="SZN">Zona Norte</option>
             </select>
 
             <button type="submit">Guardar Configuración</button>
@@ -247,6 +246,7 @@
                 <tr 
                     data-estado="{% if r.llamado %}llamado{% else %}pendiente{% endif %}" 
                     data-sucursal="{{ r.sucursal }}"
+                    data-id="{{ r.id }}"
                     {% if r.llamado or r.bloqueado %}class="registro-llamado"{% endif %}
                 >
                     <td>{{ r.nombre }}</td>
@@ -265,12 +265,7 @@
                             <button name="registro_id" value="{{ r.id }}" type="submit" class="btn-llamar">Llamar</button>
                         {% else %}
                             <span style="color:#000000; font-weight:bold;">Ya llamado </span>
-                            <form method="post" action="/repetir-llamado/1" style="display:inline;" class="form-repetir" id="form-repetir-{{ r.id }}">
-                                <input type="hidden" name="registro_id" value="{{ r.id }}">
-                                <input type="hidden" name="box" value="{{ r.box_llamado }}">
-                                <input type="hidden" name="sucursal" value="{{ r.sucursal }}">
-                                <button type="submit" class="btn-repetir">Repetir</button>
-                            </form>
+                            <button type="button" class="btn-repetir" data-registro-id="{{ r.id }}" data-box="{{ r.box_llamado | default('') }}" data-sucursal="{{ r.sucursal | default('') }}">Repetir</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -283,27 +278,224 @@
     <div id="wsStatus" class="status-indicator status-disconnected">Desconectado</div>
     
     <script>
-        let socket = null;
+        // Variables globales
+        let robustSocket = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
 
         const toggleDarkModeBtn = document.getElementById('darkModeToggle');
 
-        // Verificar si hay preferencia guardada
+        // Clase para manejar la conexión WebSocket de forma robusta
+        class RobustWebSocket {
+            constructor(url, options = {}) {
+                this.url = url;
+                this.options = Object.assign({
+                    reconnectInterval: 1000,      // Tiempo inicial entre intentos de reconexión (ms)
+                    maxReconnectInterval: 30000,  // Tiempo máximo entre intentos (ms)
+                    reconnectDecay: 1.5,          // Factor de incremento para backoff exponencial
+                    maxReconnectAttempts: 0,      // 0 = intentar indefinidamente
+                    heartbeatInterval: 30000,     // Intervalo para enviar ping (ms)
+                    heartbeatMessage: 'ping',     // Mensaje de heartbeat
+                    debug: true                   // Habilitar logs de depuración
+                }, options);
+                
+                this.reconnectAttempts = 0;
+                this.reconnectInterval = this.options.reconnectInterval;
+                this.heartbeatTimer = null;
+                this.socket = null;
+                this.forceClosed = false;
+                this.statusCallback = null;
+                this.messageCallback = null;
+                
+                this.log('Inicializando RobustWebSocket');
+            }
+            
+            // Método para conectar al WebSocket
+            connect() {
+                if (this.socket && (this.socket.readyState === WebSocket.CONNECTING || this.socket.readyState === WebSocket.OPEN)) {
+                    this.log('Ya existe una conexión activa o en proceso');
+                    return;
+                }
+                
+                this.forceClosed = false;
+                this.log(`Conectando a ${this.url}`);
+                
+                try {
+                    this.socket = new WebSocket(this.url);
+                    
+                    this.socket.onopen = (event) => {
+                        this.log('Conexión establecida');
+                        this.reconnectAttempts = 0;
+                        this.reconnectInterval = this.options.reconnectInterval;
+                        this.startHeartbeat();
+                        
+                        if (this.statusCallback) {
+                            this.statusCallback('connected');
+                        }
+                    };
+                    
+                    this.socket.onmessage = (event) => {
+                        // Si recibimos 'pong', es respuesta a nuestro heartbeat
+                        if (event.data === 'pong') {
+                            this.log('Heartbeat recibido');
+                            return;
+                        }
+                        
+                        // Procesar mensajes normales
+                        if (this.messageCallback) {
+                            try {
+                                const data = JSON.parse(event.data);
+                                this.messageCallback(data);
+                            } catch (e) {
+                                this.log(`Error al procesar mensaje: ${e.message}`);
+                                this.messageCallback(event.data);
+                            }
+                        }
+                    };
+                    
+                    this.socket.onclose = (event) => {
+                        this.stopHeartbeat();
+                        
+                        if (this.statusCallback) {
+                            this.statusCallback('disconnected', event);
+                        }
+                        
+                        if (!this.forceClosed) {
+                            this.scheduleReconnect(event);
+                        } else {
+                            this.log('Conexión cerrada manualmente');
+                        }
+                    };
+                    
+                    this.socket.onerror = (error) => {
+                        this.log(`Error en WebSocket: ${error}`);
+                        
+                        if (this.statusCallback) {
+                            this.statusCallback('error', error);
+                        }
+                    };
+                } catch (error) {
+                    this.log(`Error al crear WebSocket: ${error.message}`);
+                    this.scheduleReconnect();
+                }
+            }
+            
+            // Programar reconexión con backoff exponencial
+            scheduleReconnect(event) {
+                if (this.options.maxReconnectAttempts > 0 && this.reconnectAttempts >= this.options.maxReconnectAttempts) {
+                    this.log('Máximo de intentos de reconexión alcanzado');
+                    return;
+                }
+                
+                this.reconnectAttempts++;
+                
+                // Aplicar backoff exponencial con jitter
+                const jitter = 0.1 * this.reconnectInterval * Math.random();
+                const delay = this.reconnectInterval + jitter;
+                
+                this.log(`Programando reconexión en ${Math.round(delay)}ms (intento ${this.reconnectAttempts})`);
+                
+                setTimeout(() => {
+                    if (!this.forceClosed) {
+                        this.connect();
+                    }
+                }, delay);
+                
+                // Incrementar el intervalo para el próximo intento (backoff exponencial)
+                this.reconnectInterval = Math.min(
+                    this.reconnectInterval * this.options.reconnectDecay,
+                    this.options.maxReconnectInterval
+                );
+            }
+            
+            // Iniciar el heartbeat para mantener la conexión activa
+            startHeartbeat() {
+                this.stopHeartbeat();
+                
+                this.heartbeatTimer = setInterval(() => {
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                        this.log('Enviando heartbeat');
+                        this.socket.send(this.options.heartbeatMessage);
+                    }
+                }, this.options.heartbeatInterval);
+            }
+            
+            // Detener el heartbeat
+            stopHeartbeat() {
+                if (this.heartbeatTimer) {
+                    clearInterval(this.heartbeatTimer);
+                    this.heartbeatTimer = null;
+                }
+            }
+            
+            // Cerrar la conexión
+            close() {
+                this.forceClosed = true;
+                this.stopHeartbeat();
+                
+                if (this.socket) {
+                    this.log('Cerrando conexión WebSocket');
+                    this.socket.close();
+                }
+            }
+            
+            // Enviar mensaje
+            send(data) {
+                if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                    this.log('No se puede enviar mensaje: WebSocket no está abierto');
+                    return false;
+                }
+                
+                try {
+                    if (typeof data === 'object') {
+                        this.socket.send(JSON.stringify(data));
+                    } else {
+                        this.socket.send(data);
+                    }
+                    return true;
+                } catch (error) {
+                    this.log(`Error al enviar mensaje: ${error.message}`);
+                    return false;
+                }
+            }
+            
+            // Registrar callback para cambios de estado
+            onStatusChange(callback) {
+                this.statusCallback = callback;
+            }
+            
+            // Registrar callback para mensajes
+            onMessage(callback) {
+                this.messageCallback = callback;
+            }
+            
+            // Función de log
+            log(message) {
+                if (this.options.debug) {
+                    console.log(`[WebSocket] ${message}`);
+                }
+            }
+        }
+
+        // Verificar si hay preferencia guardada para el modo oscuro
         if (localStorage.getItem('darkMode') === 'true') {
-        document.body.classList.add('dark-mode');
-        toggleDarkModeBtn.textContent = 'Modo Claro';
+            document.body.classList.add('dark-mode');
+            toggleDarkModeBtn.textContent = 'Modo Claro';
         } else {
-        toggleDarkModeBtn.textContent = 'Modo Oscuro';
+            toggleDarkModeBtn.textContent = 'Modo Oscuro';
         }
 
         toggleDarkModeBtn.addEventListener('click', () => {
-        document.body.classList.toggle('dark-mode');
-        const isDark = document.body.classList.contains('dark-mode');
-        localStorage.setItem('darkMode', isDark);
-        toggleDarkModeBtn.textContent = isDark ? 'Modo Claro' : 'Modo Oscuro';
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDark);
+            toggleDarkModeBtn.textContent = isDark ? 'Modo Claro' : 'Modo Oscuro';
         });
-        
-        // Verificar si ya hay valores guardados
+
+        // Inicialización al cargar la página
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Página cargada, inicializando formularios y configuraciones');
+            
             const savedBox = localStorage.getItem('boxValue');
             const savedSucursal = localStorage.getItem('sucursalValue');
             
@@ -322,98 +514,165 @@
                 filtrarPorSucursal(savedSucursal);
                 
                 // Conectar WebSocket
-                conectarWebSocket(savedSucursal);
+                conectarWebSocketRobusto(savedSucursal);
             }
             
             // Configurar filtros
             const filtroRadios = document.querySelectorAll('input[name="filtro"]');
             filtroRadios.forEach(radio => {
-                radio.addEventListener('change', filtrarRegistros);
-            });
-
-            // Preparar todos los botones de repetir para que usen los valores correctos
-            document.querySelectorAll('.btn-repetir').forEach(button => {
-                button.addEventListener('click', function(e) {
-                    // Asegurar que el formulario padre tenga los campos correctos
-                    const form = this.closest('form');
-                    
-                    // Si no hay un valor explícito de box en el formulario, usar el guardado
-                    if (!form.querySelector('input[name="box"]').value) {
-                        const savedBox = localStorage.getItem('boxValue');
-                        if (savedBox) {
-                            form.querySelector('input[name="box"]').value = savedBox;
-                        }
-                    }
-                    
-                    // Asegurar que la sucursal esté definida
-                    if (!form.querySelector('input[name="sucursal"]').value) {
-                        const sucursalCell = this.closest('tr').querySelector('td:nth-child(4)').textContent;
-                        form.querySelector('input[name="sucursal"]').value = sucursalCell;
-                    }
+                radio.addEventListener('change', () => {
+                    console.log('Filtro cambiado:', radio.value);
+                    filtrarRegistros();
                 });
             });
 
-            // Manejar la actualización dinámica cuando se añaden nuevos registros ya llamados
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.addedNodes.length) {
-                        // Revisar si hay nuevos formularios de repetir
-                        document.querySelectorAll('.form-repetir').forEach(form => {
-                            // Solo procesar formularios que no tengan el evento ya agregado
-                            if (!form.dataset.processed) {
-                                form.dataset.processed = "true";
-                                prepararFormularioRepetir(form);
-                            }
+            // Configurar el formulario de llamada
+            const llamarForm = document.getElementById('llamarForm');
+            if (llamarForm) {
+                console.log('Inicializando formulario #llamarForm');
+                llamarForm.addEventListener('submit', async function (e) {
+                    e.preventDefault();
+                    console.log('Submit disparado para formulario #llamarForm');
+
+                    const botonLlamar = e.submitter;
+                    if (!botonLlamar || !botonLlamar.value) {
+                        console.error('Error: No se pudo determinar el registro a llamar');
+                        return;
+                    }
+
+                    const registroId = botonLlamar.value;
+                    const currentBox = localStorage.getItem('boxValue') || 'default-box';
+                    const currentSucursal = localStorage.getItem('sucursalValue') || 'casa central';
+
+                    if (!registroId || !currentBox || !currentSucursal) {
+                        console.error(`Error: Faltan valores - registro_id: ${registroId}, box: ${currentBox}, sucursal: ${currentSucursal}`);
+                        alert('Error: No se puede realizar el llamado sin registro, box o sucursal');
+                        return;
+                    }
+
+                    console.log(`Enviando llamado para registro ${registroId}, box: ${currentBox}, sucursal: ${currentSucursal}`);
+
+                    const formData = new FormData();
+                    formData.append('registro_id', registroId);
+                    formData.append('box', currentBox);
+                    formData.append('sucursal', currentSucursal);
+
+                    try {
+                        const response = await fetch('/llamar/1', {
+                            method: 'POST',
+                            body: formData
                         });
-                    }
-                });
-            });
 
-            // Configurar el observador para todo el contenido de la tabla
-            observer.observe(document.getElementById('registrosTabla'), {
-                childList: true,
-                subtree: true
-            });
-            
-            // Procesar formularios existentes
-            document.querySelectorAll('.form-repetir').forEach(prepararFormularioRepetir);
-            
-            // Función para preparar cada formulario
-            function prepararFormularioRepetir(form) {
-                // Asegurar que los campos tengan valores correctos
-                const registroId = form.querySelector('input[name="registro_id"]').value;
-                const boxInput = form.querySelector('input[name="box"]');
-                const sucursalInput = form.querySelector('input[name="sucursal"]');
-                
-                // Si no hay box definido en el formulario, usar el guardado en localStorage
-                if (!boxInput.value) {
-                    const savedBox = localStorage.getItem('boxValue');
-                    if (savedBox) {
-                        boxInput.value = savedBox;
+                        if (response.ok) {
+                            console.log(`Llamado exitoso para registro ${registroId}`);
+                            
+                            // Actualizar la interfaz inmediatamente sin esperar al WebSocket
+                            const fila = document.querySelector(`tr[data-id="${registroId}"]`);
+                            if (fila) {
+                                fila.setAttribute('data-estado', 'llamado');
+                                fila.classList.add('registro-llamado');
+                                
+                                const celdas = fila.querySelectorAll('td');
+                                celdas[4].innerHTML = `<span class="box-info">Llamado en Box: ${currentBox}</span>`;
+                                celdas[5].innerHTML = `
+                                    <span style="color:#000000; font-weight:bold;">Ya llamado </span>
+                                    <button type="button" class="btn-repetir" data-registro-id="${registroId}" data-box="${currentBox}" data-sucursal="${currentSucursal}">Repetir</button>
+                                `;
+                                
+                                // Configurar el nuevo botón de repetir
+                                configurarBotonesRepetir();
+                                
+                                const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
+                                if (filtroSeleccionado === 'pendientes') {
+                                    fila.style.display = 'none';
+                                }
+                            }
+                        } else {
+                            const errorText = await response.text();
+                            console.error(`Error en la solicitud: ${response.status} - ${errorText}`);
+                            alert(`Error al realizar el llamado: ${errorText}`);
+                        }
+                    } catch (error) {
+                        console.error(`Error al enviar la solicitud: ${error}`);
+                        alert(`Error al enviar la solicitud: ${error.message}`);
                     }
-                }
-                
-                // Asegurarse que el formulario tenga un evento submit para manejar el envío
-                form.addEventListener('submit', function(e) {
-                    // No prevenir el envío, pero verificar que tenga los campos necesarios
-                    if (!boxInput.value || !sucursalInput.value) {
-                        e.preventDefault();
-                        alert('Error: No se puede repetir el llamado sin box o sucursal');
-                    }
-                    
-                    // También puede ser útil para debugging
-                    console.log(`Repitiendo llamado para registro ${registroId} en box ${boxInput.value}, sucursal ${sucursalInput.value}`);
                 });
             }
 
+            // Configurar botones de repetir
+            configurarBotonesRepetir();
+            
+            // Añadir indicador de PC y box
+            const statusIndicator = document.getElementById('wsStatus');
+            if (statusIndicator) {
+                const pcIndicator = document.createElement('span');
+                pcIndicator.className = 'pc-indicator';
+                pcIndicator.textContent = ` (PC: ${savedBox || 'No configurado'})`;
+                statusIndicator.appendChild(pcIndicator);
+            }
         });
 
-        // Función para actualizar registros después de una llamada repetida
+        // Configurar botones de repetir llamado
+        function configurarBotonesRepetir() {
+            document.querySelectorAll('.btn-repetir').forEach(boton => {
+                if (boton.dataset.configured) return;
+                boton.dataset.configured = "true";
+                
+                boton.addEventListener('click', async function() {
+                    const registroId = this.dataset.registroId;
+                    const box = localStorage.getItem('boxValue') || 'default-box'; // Usar siempre el box actual de esta PC
+                    const sucursal = this.dataset.sucursal || localStorage.getItem('sucursalValue') || 'casa central';
+                    
+                    console.log(`Enviando llamado para registro ${registroId}, box: ${box}, sucursal: ${sucursal}`);
+                    
+                    const formData = new FormData();
+                    formData.append('registro_id', registroId);
+                    formData.append('box', box);
+                    formData.append('sucursal', sucursal);
+                    
+                    try {
+                        const response = await fetch('/repetir-llamado/1', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (response.ok) {
+                            console.log(`Repetición de llamado exitosa para registro ${registroId}`);
+                            actualizarDespuesDeRepetir(registroId, box);
+                        } else {
+                            const errorText = await response.text();
+                            console.error(`Error en la solicitud: ${response.status} - ${errorText}`);
+                            alert(`Error al repetir el llamado: ${errorText}`);
+                        }
+                    } catch (error) {
+                        console.error(`Error al enviar la solicitud: ${error}`);
+                        alert(`Error al enviar la solicitud: ${error.message}`);
+                    }
+                });
+            });
+        }
+
+        // Configurar el observador para nuevos botones
+        const observer = new MutationObserver(function (mutations) {
+            console.log('Mutación detectada en la tabla');
+            mutations.forEach(function (mutation) {
+                if (mutation.addedNodes.length) {
+                    configurarBotonesRepetir();
+                }
+            });
+        });
+
+        // Observar cambios en la tabla
+        observer.observe(document.getElementById('registrosTabla'), {
+            childList: true,
+            subtree: true
+        });
+
+        // Actualizar registros después de un llamado repetido
         function actualizarDespuesDeRepetir(registroId, box) {
-            // Encuentra la fila del registro
+            console.log(`Actualizando UI para registro ${registroId} con box: ${box}`);
             const fila = document.querySelector(`tr[data-id="${registroId}"]`);
             if (fila) {
-                // Actualiza la información del box si es necesario
                 const celdaEstado = fila.querySelector('td:nth-child(5)');
                 if (celdaEstado) {
                     const spanBox = celdaEstado.querySelector('.box-info');
@@ -421,28 +680,30 @@
                         spanBox.textContent = `Llamado en Box: ${box}`;
                     }
                 }
-                
-                // También actualizar el valor en el formulario de repetir
-                const formRepetir = document.getElementById(`form-repetir-${registroId}`);
-                if (formRepetir) {
-                    const boxInput = formRepetir.querySelector('input[name="box"]');
-                    if (boxInput) {
-                        boxInput.value = box;
-                    }
+
+                const botonRepetir = fila.querySelector('.btn-repetir');
+                if (botonRepetir) {
+                    botonRepetir.dataset.box = box;
                 }
             }
         }
+
         // Guardar la configuración cuando se envía el formulario
         document.getElementById('configForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            console.log('Formulario de configuración enviado');
             
             const boxValue = document.getElementById('boxInput').value;
             const sucursalValue = document.getElementById('sucursalInput').value;
             
             if (boxValue && sucursalValue) {
+                console.log(`Guardando configuración - box: ${boxValue}, sucursal: ${sucursalValue}`);
+                
                 // Cerrar WebSocket anterior si existe
-                if (socket) {
-                    socket.close();
+                if (robustSocket) {
+                    console.log('Cerrando WebSocket anterior');
+                    robustSocket.close();
+                    robustSocket = null;
                 }
                 
                 // Guardar en localStorage
@@ -462,24 +723,34 @@
                 // Aplicar filtro por sucursal
                 filtrarPorSucursal(sucursalValue);
                 
-                // Conectar nuevo WebSocket para la sucursal seleccionada
-                conectarWebSocket(sucursalValue);
+                // Conectar nuevo WebSocket
+                console.log(`Conectando WebSocket para sucursal: ${sucursalValue}`);
+                conectarWebSocketRobusto(sucursalValue);
+                
+                // Actualizar indicador de PC
+                const statusIndicator = document.getElementById('wsStatus');
+                if (statusIndicator) {
+                    const pcIndicator = statusIndicator.querySelector('.pc-indicator');
+                    if (pcIndicator) {
+                        pcIndicator.textContent = ` (PC: ${boxValue})`;
+                    }
+                }
             }
         });
 
         // Cambiar la configuración
         document.getElementById('changeSettings').addEventListener('click', function() {
-            // Mostrar el panel de configuración
+            console.log('Abriendo panel de configuración');
             document.getElementById('settingsPanel').classList.remove('hidden');
             document.getElementById('activeSettings').classList.add('hidden');
             
-            // Prellenar con los valores actuales
             document.getElementById('boxInput').value = localStorage.getItem('boxValue') || '';
             document.getElementById('sucursalInput').value = localStorage.getItem('sucursalValue') || '';
         });
-        
+
         // Filtrar registros según estado (pendiente/llamado)
         function filtrarRegistros() {
+            console.log('Aplicando filtro de registros');
             const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
             const sucursalActual = localStorage.getItem('sucursalValue');
             const filas = document.querySelectorAll('#registrosTabla tr');
@@ -488,7 +759,6 @@
                 const estado = fila.getAttribute('data-estado');
                 const sucursalFila = fila.getAttribute('data-sucursal');
                 
-                // Solo mostrar registros de la sucursal actual
                 if (sucursalActual && sucursalFila !== sucursalActual) {
                     fila.style.display = 'none';
                     return;
@@ -505,9 +775,10 @@
                 }
             });
         }
-        
+
         // Filtrar registros por sucursal seleccionada
         function filtrarPorSucursal(sucursal) {
+            console.log(`Filtrando por sucursal: ${sucursal}`);
             const filas = document.querySelectorAll('#registrosTabla tr');
             
             filas.forEach(fila => {
@@ -516,7 +787,6 @@
                 if (sucursal && sucursalFila !== sucursal) {
                     fila.style.display = 'none';
                 } else {
-                    // Aplicar también el filtro de estado si está seleccionado
                     const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
                     const estado = fila.getAttribute('data-estado');
                     
@@ -532,81 +802,115 @@
                 }
             });
         }
-        
-        // Conectar al WebSocket
-        function conectarWebSocket(sucursal) {
-            // Cerrar la conexión anterior si existe
-            if (socket) {
-                socket.close();
+
+        // Función para conectar el WebSocket robusto
+        function conectarWebSocketRobusto(sucursal) {
+            // Cerrar conexión existente si hay una
+            if (robustSocket) {
+                console.log('Cerrando WebSocket anterior');
+                robustSocket.close();
+                robustSocket = null;
             }
             
-            // Crear nueva conexión WebSocket para la sucursal seleccionada
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/prellamador/${sucursal.toLowerCase()}`;
-            socket = new WebSocket(wsUrl);
+            const wsUrl = `${protocol}//${window.location.host}/ws/prellamador/${encodeURIComponent(sucursal.toLowerCase())}`;
+            console.log(`Conectando a WebSocket: ${wsUrl}`);
             
-            // Actualizar indicador de estado
             const statusIndicator = document.getElementById('wsStatus');
             
-            socket.onopen = function(e) {
-                console.log("Conexión WebSocket establecida");
-                statusIndicator.textContent = "Conectado";
-                statusIndicator.className = "status-indicator status-connected";
-            };
+            // Crear nueva instancia de WebSocket robusto
+            robustSocket = new RobustWebSocket(wsUrl, {
+                reconnectInterval: 2000,       // Empezar con 2 segundos
+                maxReconnectInterval: 30000,   // Máximo 30 segundos entre intentos
+                heartbeatInterval: 25000,      // Enviar ping cada 25 segundos
+                debug: true                    // Habilitar logs
+            });
             
-            socket.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                console.log("Datos recibidos:", data);
+            // Manejar cambios de estado
+            robustSocket.onStatusChange((status, event) => {
+                console.log(`Estado del WebSocket: ${status}`);
                 
-                if (data.action === "nuevo_registro") {
+                if (status === 'connected') {
+                    statusIndicator.textContent = 'Conectado';
+                    statusIndicator.className = 'status-indicator status-connected';
+                } else if (status === 'disconnected') {
+                    statusIndicator.textContent = 'Reconectando...';
+                    statusIndicator.className = 'status-indicator status-disconnected';
+                    
+                    // Si el código de cierre es anormal, mostrar información adicional
+                    if (event && event.code !== 1000 && event.code !== 1001) {
+                        console.warn(`Cierre anormal: Código ${event.code}, Razón: ${event.reason || 'No especificada'}`);
+                    }
+                } else if (status === 'error') {
+                    statusIndicator.textContent = 'Error de conexión';
+                    statusIndicator.className = 'status-indicator status-disconnected';
+                }
+                
+                // Volver a añadir el indicador de PC
+                const pcIndicator = document.createElement('span');
+                pcIndicator.className = 'pc-indicator';
+                pcIndicator.textContent = ` (PC: ${localStorage.getItem('boxValue') || 'No configurado'})`;
+                statusIndicator.appendChild(pcIndicator);
+            });
+            
+            // Manejar mensajes recibidos
+            robustSocket.onMessage((data) => {
+                console.log('Mensaje recibido del WebSocket:', data);
+                
+                if (data.action === 'nuevo_registro') {
                     agregarNuevoRegistro(data.registro);
-                } else if (data.action === "actualizar_registro") {
+                } else if (data.action === 'actualizar_registro') {
                     actualizarRegistro(data.registro);
                 }
-            };
+            });
             
-            socket.onclose = function(event) {
-                console.log("Conexión WebSocket cerrada");
-                statusIndicator.textContent = "Desconectado";
-                statusIndicator.className = "status-indicator status-disconnected";
-                
-                // Intentar reconectar después de 5 segundos
-                setTimeout(function() {
-                    conectarWebSocket(sucursal);
-                }, 5000);
-            };
+            // Iniciar conexión
+            robustSocket.connect();
             
-            socket.onerror = function(error) {
-                console.error("Error en WebSocket:", error);
-                statusIndicator.textContent = "Error de conexión";
-                statusIndicator.className = "status-indicator status-disconnected";
-            };
+            // Agregar detector de visibilidad para reconectar cuando la página vuelve a ser visible
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && robustSocket) {
+                    console.log('Página visible, verificando conexión WebSocket');
+                    if (!robustSocket.socket || robustSocket.socket.readyState !== WebSocket.OPEN) {
+                        console.log('Reconectando WebSocket después de cambio de visibilidad');
+                        robustSocket.connect();
+                    }
+                }
+            });
+            
+            // Agregar detector de conexión de red
+            window.addEventListener('online', () => {
+                console.log('Red disponible, reconectando WebSocket');
+                if (robustSocket) {
+                    robustSocket.connect();
+                }
+            });
+            
+            return robustSocket;
         }
-        
+
         // Agregar un nuevo registro a la tabla
         function agregarNuevoRegistro(registro) {
+            console.log(`Agregando nuevo registro: ${registro.id}`);
             const tablaBody = document.getElementById('registrosTabla');
             const sucursalActual = localStorage.getItem('sucursalValue');
             
-            // Solo procesar si pertenece a la sucursal actual
             if (sucursalActual && registro.sucursal !== sucursalActual) {
                 return;
             }
             
-            // Evitar duplicados verificando si ya existe un registro con el mismo ID
             const registroExistente = document.querySelector(`tr[data-id="${registro.id}"]`);
             if (registroExistente) {
+                console.log(`Registro ${registro.id} ya existe, omitiendo`);
                 return;
             }
             
-            // Crear nueva fila
             const nuevaFila = document.createElement('tr');
             nuevaFila.setAttribute('data-estado', 'pendiente');
             nuevaFila.setAttribute('data-sucursal', registro.sucursal);
             nuevaFila.setAttribute('data-id', registro.id);
             nuevaFila.className = 'new-record';
             
-            // Contenido de la fila
             nuevaFila.innerHTML = `
                 <td>${registro.nombre}</td>
                 <td>${registro.dni}</td>
@@ -618,38 +922,62 @@
                 </td>
             `;
             
-            // Aplicar filtros actuales
             const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
             if (filtroSeleccionado === 'llamados') {
                 nuevaFila.style.display = 'none';
             }
             
-            // Añadir a la tabla
             tablaBody.prepend(nuevaFila);
         }
-        
-        // Actualizar un registro existente (ej: cuando fue llamado)
+
+        // Actualizar un registro existente
         function actualizarRegistro(registro) {
+            console.log(`Actualizando registro: ${registro.id}`);
             const fila = document.querySelector(`tr[data-id="${registro.id}"]`);
             if (!fila) return;
             
-            // Actualizar estado
             fila.setAttribute('data-estado', registro.llamado ? 'llamado' : 'pendiente');
             if (registro.llamado || registro.bloqueado) {
                 fila.classList.add('registro-llamado');
                 
-                // Actualizar contenido de la fila
                 const celdas = fila.querySelectorAll('td');
                 celdas[4].innerHTML = `<span class="box-info">Llamado en Box: ${registro.box_llamado}</span>`;
-                celdas[5].innerHTML = `<button disabled class="btn-deshabilitado">Ya llamado</button>`;
+                celdas[5].innerHTML = `
+                    <span style="color:#000000; font-weight:bold;">Ya llamado </span>
+                    <button type="button" class="btn-repetir" data-registro-id="${registro.id}" data-box="${registro.box_llamado || ''}" data-sucursal="${registro.sucursal || ''}">Repetir</button>
+                `;
                 
-                // Aplicar filtros
+                // Configurar el nuevo botón de repetir
+                configurarBotonesRepetir();
+                
                 const filtroSeleccionado = document.querySelector('input[name="filtro"]:checked').value;
                 if (filtroSeleccionado === 'pendientes') {
                     fila.style.display = 'none';
                 }
             }
         }
+
+        // Agregar estilos CSS para el indicador de PC
+        document.addEventListener('DOMContentLoaded', function() {
+            const style = document.createElement('style');
+            style.textContent = `
+                .pc-indicator {
+                    font-size: 0.8em;
+                    opacity: 0.8;
+                    margin-left: 5px;
+                    font-weight: bold;
+                }
+                
+                .status-indicator.status-connected .pc-indicator {
+                    color: #1a4a1a;
+                }
+                
+                .status-indicator.status-disconnected .pc-indicator {
+                    color: #721c24;
+                }
+            `;
+            document.head.appendChild(style);
+        });
     </script>
 </body>
 </html>

@@ -63,6 +63,9 @@
         .status-disconnected {
             background-color: #f44336;
         }
+        .status-connecting {
+            background-color: #FFC107;
+        }
         #btn-reconnect {
             padding: 6px 12px;
             background-color: #4CAF50;
@@ -80,6 +83,11 @@
             margin-right: 10px;
             font-size: 14px;
         }
+        .connection-details {
+            font-size: 12px;
+            color: #666;
+            margin-left: 20px;
+        }
     </style>
 </head>
 <body>
@@ -87,6 +95,7 @@
         <div class="selector-container">
             <span id="connection-status" class="status-indicator status-disconnected"></span>
             <span id="connection-text">Desconectado</span>
+            <span id="connection-details" class="connection-details"></span>
         </div>
         <h1 class="header-title">Movimientos en tiempo real</h1>
         <div style="width: 200px;"></div>
@@ -112,11 +121,210 @@
     <button id="btn-reconnect">Reconectar</button>
 
     <script>
+        // Clase para manejar la conexión WebSocket de forma robusta
+        class RobustWebSocket {
+            constructor(url, options = {}) {
+                this.url = url;
+                this.options = Object.assign({
+                    reconnectInterval: 1000,      // Tiempo inicial entre intentos de reconexión (ms)
+                    maxReconnectInterval: 30000,  // Tiempo máximo entre intentos (ms)
+                    reconnectDecay: 1.5,          // Factor de incremento para backoff exponencial
+                    maxReconnectAttempts: 0,      // 0 = intentar indefinidamente
+                    heartbeatInterval: 30000,     // Intervalo para enviar ping (ms)
+                    heartbeatMessage: 'ping',     // Mensaje de heartbeat
+                    debug: true                   // Habilitar logs de depuración
+                }, options);
+                
+                this.reconnectAttempts = 0;
+                this.reconnectInterval = this.options.reconnectInterval;
+                this.heartbeatTimer = null;
+                this.socket = null;
+                this.forceClosed = false;
+                this.statusCallback = null;
+                this.messageCallback = null;
+                
+                this.log('Inicializando RobustWebSocket');
+            }
+            
+            // Método para conectar al WebSocket
+            connect() {
+                if (this.socket && (this.socket.readyState === WebSocket.CONNECTING || this.socket.readyState === WebSocket.OPEN)) {
+                    this.log('Ya existe una conexión activa o en proceso');
+                    return;
+                }
+                
+                this.forceClosed = false;
+                this.log(`Conectando a ${this.url}`);
+                
+                if (this.statusCallback) {
+                    this.statusCallback('connecting');
+                }
+                
+                try {
+                    this.socket = new WebSocket(this.url);
+                    
+                    this.socket.onopen = (event) => {
+                        this.log('Conexión establecida');
+                        this.reconnectAttempts = 0;
+                        this.reconnectInterval = this.options.reconnectInterval;
+                        this.startHeartbeat();
+                        
+                        if (this.statusCallback) {
+                            this.statusCallback('connected');
+                        }
+                    };
+                    
+                    this.socket.onmessage = (event) => {
+                        // Si recibimos 'pong', es respuesta a nuestro heartbeat
+                        if (event.data === 'pong') {
+                            this.log('Heartbeat recibido');
+                            return;
+                        }
+                        
+                        // Procesar mensajes normales
+                        if (this.messageCallback) {
+                            try {
+                                const data = JSON.parse(event.data);
+                                this.messageCallback(data);
+                            } catch (e) {
+                                this.log(`Error al procesar mensaje: ${e.message}`);
+                                this.messageCallback(event.data);
+                            }
+                        }
+                    };
+                    
+                    this.socket.onclose = (event) => {
+                        this.stopHeartbeat();
+                        
+                        if (this.statusCallback) {
+                            this.statusCallback('disconnected', event);
+                        }
+                        
+                        if (!this.forceClosed) {
+                            this.scheduleReconnect(event);
+                        } else {
+                            this.log('Conexión cerrada manualmente');
+                        }
+                    };
+                    
+                    this.socket.onerror = (error) => {
+                        this.log(`Error en WebSocket: ${error}`);
+                        
+                        if (this.statusCallback) {
+                            this.statusCallback('error', error);
+                        }
+                    };
+                } catch (error) {
+                    this.log(`Error al crear WebSocket: ${error.message}`);
+                    this.scheduleReconnect();
+                }
+            }
+            
+            // Programar reconexión con backoff exponencial
+            scheduleReconnect(event) {
+                if (this.options.maxReconnectAttempts > 0 && this.reconnectAttempts >= this.options.maxReconnectAttempts) {
+                    this.log('Máximo de intentos de reconexión alcanzado');
+                    return;
+                }
+                
+                this.reconnectAttempts++;
+                
+                // Aplicar backoff exponencial con jitter
+                const jitter = 0.1 * this.reconnectInterval * Math.random();
+                const delay = this.reconnectInterval + jitter;
+                
+                this.log(`Programando reconexión en ${Math.round(delay)}ms (intento ${this.reconnectAttempts})`);
+                
+                setTimeout(() => {
+                    if (!this.forceClosed) {
+                        this.connect();
+                    }
+                }, delay);
+                
+                // Incrementar el intervalo para el próximo intento (backoff exponencial)
+                this.reconnectInterval = Math.min(
+                    this.reconnectInterval * this.options.reconnectDecay,
+                    this.options.maxReconnectInterval
+                );
+            }
+            
+            // Iniciar el heartbeat para mantener la conexión activa
+            startHeartbeat() {
+                this.stopHeartbeat();
+                
+                this.heartbeatTimer = setInterval(() => {
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                        this.log('Enviando heartbeat');
+                        this.socket.send(this.options.heartbeatMessage);
+                    }
+                }, this.options.heartbeatInterval);
+            }
+            
+            // Detener el heartbeat
+            stopHeartbeat() {
+                if (this.heartbeatTimer) {
+                    clearInterval(this.heartbeatTimer);
+                    this.heartbeatTimer = null;
+                }
+            }
+            
+            // Cerrar la conexión
+            close() {
+                this.forceClosed = true;
+                this.stopHeartbeat();
+                
+                if (this.socket) {
+                    this.log('Cerrando conexión WebSocket');
+                    this.socket.close();
+                }
+            }
+            
+            // Enviar mensaje
+            send(data) {
+                if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                    this.log('No se puede enviar mensaje: WebSocket no está abierto');
+                    return false;
+                }
+                
+                try {
+                    if (typeof data === 'object') {
+                        this.socket.send(JSON.stringify(data));
+                    } else {
+                        this.socket.send(data);
+                    }
+                    return true;
+                } catch (error) {
+                    this.log(`Error al enviar mensaje: ${error.message}`);
+                    return false;
+                }
+            }
+            
+            // Registrar callback para cambios de estado
+            onStatusChange(callback) {
+                this.statusCallback = callback;
+            }
+            
+            // Registrar callback para mensajes
+            onMessage(callback) {
+                this.messageCallback = callback;
+            }
+            
+            // Función de log
+            log(message) {
+                if (this.options.debug) {
+                    console.log(`[WebSocket] ${message}`);
+                }
+            }
+        }
+
+        // Variables globales
         const sonido = document.getElementById("sonido-alerta");
         const cuerpoTabla = document.getElementById("tabla-cuerpo");
         const connectionStatus = document.getElementById("connection-status");
         const connectionText = document.getElementById("connection-text");
+        const connectionDetails = document.getElementById("connection-details");
         const btnReconnect = document.getElementById("btn-reconnect");
+        const btnActivarSonido = document.getElementById("btn-activar-sonido");
 
         const idToSucursal = {
             1: "casa central",
@@ -125,94 +333,161 @@
             4: "catamarca"
         };
 
-        let websocket = null;
+        let robustSocket = null;
         let currentSucursal = null;
+        let reconnectAttempts = 0;
+        let deviceId = generateDeviceId();
 
-        function updateConnectionStatus(status) {
-            if (status === "connected") {
-                connectionStatus.className = "status-indicator status-connected";
-                connectionText.textContent = "Conectado";
-                btnReconnect.style.display = "none";
-            } else {
-                connectionStatus.className = "status-indicator status-disconnected";
-                connectionText.textContent = "Desconectado";
-                btnReconnect.style.display = "inline-block";
+        // Generar un ID único para este dispositivo si no existe
+        function generateDeviceId() {
+            let id = localStorage.getItem('deviceId');
+            if (!id) {
+                id = 'device_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('deviceId', id);
+            }
+            return id;
+        }
+
+        // Actualizar el estado de la conexión en la UI
+        function updateConnectionStatus(status, details = null) {
+            switch (status) {
+                case "connected":
+                    connectionStatus.className = "status-indicator status-connected";
+                    connectionText.textContent = "Conectado";
+                    btnReconnect.style.display = "none";
+                    connectionDetails.textContent = `ID: ${deviceId.substring(0, 8)}`;
+                    break;
+                case "connecting":
+                    connectionStatus.className = "status-indicator status-connecting";
+                    connectionText.textContent = "Conectando...";
+                    btnReconnect.style.display = "none";
+                    break;
+                case "disconnected":
+                case "error":
+                    connectionStatus.className = "status-indicator status-disconnected";
+                    connectionText.textContent = "Desconectado";
+                    btnReconnect.style.display = "inline-block";
+                    
+                    if (details && details.code) {
+                        connectionDetails.textContent = `Código: ${details.code}`;
+                    } else {
+                        connectionDetails.textContent = `Intentos: ${reconnectAttempts}`;
+                    }
+                    break;
             }
         }
 
-        function conectarWebSocket(sucursal) {
-            if (websocket) {
-                try {
-                    websocket.onclose = null;
-                    websocket.close();
-                } catch (e) {
-                    console.error("Error al cerrar WebSocket:", e);
-                }
-                websocket = null;
+        // Conectar al WebSocket de forma robusta
+        function conectarWebSocketRobusto(sucursal) {
+            // Cerrar conexión existente si hay una
+            if (robustSocket) {
+                console.log('Cerrando WebSocket anterior');
+                robustSocket.close();
+                robustSocket = null;
             }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(sucursal.toLowerCase())}`;
+            console.log(`Conectando a WebSocket robusto: ${wsUrl}`);
+            
+            // Crear nueva instancia de WebSocket robusto
+            robustSocket = new RobustWebSocket(wsUrl, {
+                reconnectInterval: 2000,       // Empezar con 2 segundos
+                maxReconnectInterval: 30000,   // Máximo 30 segundos entre intentos
+                heartbeatInterval: 25000,      // Enviar ping cada 25 segundos
+                debug: true                    // Habilitar logs
+            });
+            
+            // Manejar cambios de estado
+            robustSocket.onStatusChange((status, event) => {
+                console.log(`Estado del WebSocket: ${status}`);
+                reconnectAttempts = robustSocket.reconnectAttempts;
+                updateConnectionStatus(status, event);
+                
+                if (status === 'connected') {
+                    // Limpiar la tabla al reconectar
+                    cuerpoTabla.innerHTML = '';
+                }
+            });
+            
+            // Manejar mensajes recibidos
+            robustSocket.onMessage((data) => {
+                console.log('Mensaje recibido del WebSocket:', data);
+                procesarMensaje(data);
+            });
+            
+            // Iniciar conexión
+            robustSocket.connect();
+            currentSucursal = sucursal;
+            
+            // Agregar detector de visibilidad para reconectar cuando la página vuelve a ser visible
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && robustSocket) {
+                    console.log('Página visible, verificando conexión WebSocket');
+                    if (!robustSocket.socket || robustSocket.socket.readyState !== WebSocket.OPEN) {
+                        console.log('Reconectando WebSocket después de cambio de visibilidad');
+                        robustSocket.connect();
+                    }
+                }
+            });
+            
+            // Agregar detector de conexión de red
+            window.addEventListener('online', () => {
+                console.log('Red disponible, reconectando WebSocket');
+                if (robustSocket) {
+                    robustSocket.connect();
+                }
+            });
+            
+            return robustSocket;
+        }
+
+        // Procesar mensaje recibido
+        function procesarMensaje(data) {
+            const filaAnterior = cuerpoTabla.querySelector('tr.nuevo');
+            if (filaAnterior) filaAnterior.classList.remove('nuevo');
+
+            const fila = document.createElement("tr");
+            fila.classList.add("nuevo");
+            fila.innerHTML = `
+                <td>${data.name}</td>
+                <td>${data.fecha}</td>
+                <td>${data.descripcion || ''}</td>
+                <td>${data.box}</td>
+            `;
+            cuerpoTabla.prepend(fila);
 
             try {
-                console.log(`Conectando a WebSocket para sucursal: ${sucursal}`);
-                websocket = new WebSocket(`ws://${location.host}/ws/${encodeURIComponent(sucursal.toLowerCase())}`);
-
-                websocket.onopen = () => {
-                    console.log(`Conectado al WebSocket para sucursal: ${sucursal}`);
-                    updateConnectionStatus("connected");
-                    websocket.send("keep-alive");
-                    cuerpoTabla.innerHTML = '';
-                    currentSucursal = sucursal;
-                };
-
-                websocket.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    const filaAnterior = cuerpoTabla.querySelector('tr.nuevo');
-                    if (filaAnterior) filaAnterior.classList.remove('nuevo');
-
-                    const fila = document.createElement("tr");
-                    fila.classList.add("nuevo");
-                    fila.innerHTML = `
-                        <td>${data.name}</td>
-                        <td>${data.fecha}</td>
-                        <td>${data.descripcion || ''}</td>
-                        <td>${data.box}</td>
-                    `;
-                    cuerpoTabla.prepend(fila);
-
-                    try {
-                        sonido.pause();
-                        sonido.currentTime = 0;
-                        sonido.play().catch(err => console.warn("Audio no pudo reproducirse:", err));
-                    } catch (error) {
-                        console.warn("Error al reproducir sonido:", error);
-                    }
-
-                    const filas = cuerpoTabla.querySelectorAll("tr");
-                    if (filas.length > 5) filas[5].remove();
-                };
-
-                websocket.onclose = () => {
-                    console.log("WebSocket desconectado.");
-                    updateConnectionStatus("disconnected");
-                };
-
-                websocket.onerror = (err) => {
-                    console.error("Error en WebSocket:", err);
-                    updateConnectionStatus("disconnected");
-                };
-
+                sonido.pause();
+                sonido.currentTime = 0;
+                sonido.play().catch(err => console.warn("Audio no pudo reproducirse:", err));
             } catch (error) {
-                console.error("Error al crear WebSocket:", error);
-                updateConnectionStatus("disconnected");
+                console.warn("Error al reproducir sonido:", error);
             }
+
+            const filas = cuerpoTabla.querySelectorAll("tr");
+            if (filas.length > 5) filas[5].remove();
         }
 
+        // Obtener ID de sucursal desde la URL
         function obtenerIdDesdeURL() {
             const partes = window.location.pathname.split('/');
             return parseInt(partes[partes.length - 1]);
         }
 
-        const btnActivarSonido = document.getElementById("btn-activar-sonido");
+        // Inicialización al cargar la página
+        window.addEventListener('load', function () {
+            const id = obtenerIdDesdeURL();
+            const sucursal = idToSucursal[id];
 
+            if (sucursal) {
+                conectarWebSocketRobusto(sucursal);
+            } else {
+                alert("Sucursal no válida o no configurada para este ID.");
+            }
+        });
+
+        // Activar sonido
         btnActivarSonido.addEventListener("click", function () {
             sonido.play().then(() => {
                 sonido.pause();
@@ -223,20 +498,17 @@
             });
         });
 
-        window.addEventListener('load', function () {
-            const id = obtenerIdDesdeURL();
-            const sucursal = idToSucursal[id];
-
-            if (sucursal) {
-                conectarWebSocket(sucursal);
-            } else {
-                alert("Sucursal no válida o no configurada para este ID.");
+        // Reconectar manualmente
+        btnReconnect.addEventListener("click", function () {
+            if (currentSucursal) {
+                conectarWebSocketRobusto(currentSucursal);
             }
         });
 
-        btnReconnect.addEventListener("click", function () {
-            if (currentSucursal) {
-                conectarWebSocket(currentSucursal);
+        // Manejar cierre de la ventana
+        window.addEventListener('beforeunload', () => {
+            if (robustSocket) {
+                robustSocket.close();
             }
         });
     </script>

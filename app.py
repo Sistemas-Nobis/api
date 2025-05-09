@@ -793,94 +793,6 @@ async def tipos_de_beneficiario(id: int):
     
 
 # NUEVO ----
-# Templates
-# templates = Jinja2Templates(directory="templates")
-
-# # Guardamos la conexión del cliente WebSocket
-# websockets_conectados = []
-
-# @app.get("/llamador/{id}", response_class=HTMLResponse)
-# def ver_llamador(request: Request, id: int):
-#     if id == 1:
-#         return templates.TemplateResponse("llamador.html", {"request": request})
-#     else:
-#         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
-
-# @app.websocket("/ws/{id}")
-# async def websocket_endpoint(websocket: WebSocket, id: int):
-#     if id == 1:
-#         await websocket.accept()
-#         websockets_conectados.append(websocket)
-#         try:
-#             while True:
-#                 await websocket.receive_text()  # solo para mantener la conexión viva
-#         except:
-#             websockets_conectados.remove(websocket)
-#     else:
-#         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
-
-# @app.post("/webhook/{id}")
-# async def recibir_webhook(request: Request, id: int, token:str = Depends(obtener_token_wise)):
-
-#     headers_wise = {
-#                 'Content-Type': 'application/json',
-#                 'Authorization': f'Bearer {token}',
-#                 'x-api-key': 'be9dd08a9cd8422a9af1372a445ec8e4'
-#                 }
-
-#     if id == 1:
-#         data = await request.json()
-
-#         caso = data["case_id"]
-#         actividad = data["activity_id"]
-
-#         url = f'https://api.wcx.cloud/core/v1/cases/{caso}/activities/{actividad}?fields=id,type,user_id,content,contact_from,contacts_to,attachments,created_at,sending_status,channel'
-#         response = requests.request("GET", url, headers=headers_wise)
-#         data_wise = response.json()
-
-#         contacto = data['contact_id']
-#         url_contacto = f'https://api.wcx.cloud/core/v1/contacts/{contacto}?fields=id,email,personal_id,phone,name,guid,password,custom_fields,last_update,organization_id,address'
-#         response_contacto = requests.request("GET", url_contacto, headers=headers_wise)
-#         data_contacto = response_contacto.json()
-
-#         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-#         #conn = get_db_connection()
-#         #cursor = conn.cursor()
-
-#         #cursor.execute("""
-#         #    INSERT INTO movimientos_llamador (evento, caso_id, caso_created_at, contacto_id, actividad_id, actividad_type, sucursal)
-#         #    VALUES (%s, %s, %s, %s, %s, %s, %s)
-#         #""", (
-#         #    data["tipo"],
-#         #    data["monto"],
-#         #    now,
-#         #    data.get("descripcion", "")
-#         #))
-        
-#         #conn.commit()
-        
-#         print(f"Datos ws: {data}")
-#         print(f"Datos vuelta: {data_wise}")
-#         print(f"Datos contacto: {data_contacto}")
-
-#         contenido = data_wise['content']
-#         if "Recepción - Casa Central > <b>Atención Presencial - Casa Central" in contenido:
-#             print("200 OK -> Pass")
-
-#             # Enviamos el nuevo dato a todos los websockets conectados
-#             for ws in websockets_conectados:
-#                 await ws.send_json({
-#                     "name": data_contacto["name"],
-#                     "fecha": now,
-#                     "descripcion": "Casa Central"
-#                 })
-            
-#         return {"status": "registrado", "data": data_wise}
-#     else:
-#         return {"status": "ignorado"}
-
-# === Globales ===
 from fastapi import FastAPI, Request, Form, WebSocket, Depends, HTTPException, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -895,17 +807,34 @@ llamadores_activados = {}  # clave: box_sucursal → websocket
 prellamadores_activados = {}  # clave: sucursal → lista de websockets
 websockets_conectados = []
 
-# === WebSocket llamador ===
+# === WebSocket llamador ===a
 @app.websocket("/ws/{sucursal}")
 async def websocket_llamador(websocket: WebSocket, sucursal: str):
     key = f"box_{sucursal.lower()}"
     await websocket.accept()
-    llamadores_activados[key] = websocket
+    
+    # Inicializar la lista si no existe
+    if key not in llamadores_activados:
+        llamadores_activados[key] = []
+    
+    # Añadir este websocket a la lista
+    llamadores_activados[key].append(websocket)
+    print(f"Nuevo llamador conectado para {key}. Total: {len(llamadores_activados[key])}")
+    
     try:
+        # Mantener la conexión abierta
         while True:
-            await websocket.receive_text()
-    except:
-        llamadores_activados.pop(key, None)
+            data = await websocket.receive_text()
+            # Si recibimos 'ping', respondemos con 'pong'
+            if data == 'ping':
+                await websocket.send_text('pong')
+    except Exception as e:
+        print(f"Error en websocket llamador: {e}")
+    finally:
+        # Eliminar este websocket de la lista cuando se desconecta
+        if key in llamadores_activados and websocket in llamadores_activados[key]:
+            llamadores_activados[key].remove(websocket)
+            print(f"Llamador desconectado de {key}. Restantes: {len(llamadores_activados[key])}")
 
 
 # === WebSocket pre-llamador (para actualización en tiempo real) ===
@@ -1037,29 +966,44 @@ def pre_llamador_post(request: Request, id: int, box: str = Form(...), sucursal:
 
 
 # === POST: Llamar a un paciente (marca como llamado y envía a llamador) ===
+# Modificar la función llamar_registro
 @app.post("/llamar/{id}")
 async def llamar_registro(request: Request, id: int, registro_id: str = Form(...), box: str = Form(...), sucursal: str = Form(...)):
     for reg in registros_disponibles:
         if reg["id"] == registro_id and not reg.get("llamado", False):
             # Marcar como llamado
             reg["llamado"] = True
-            reg["bloqueado"] = True  # Mantener compatibilidad con código existente
-            reg["box_llamado"] = box  # Guardar el box donde fue llamado
+            reg["bloqueado"] = True
+            reg["box_llamado"] = box
             
             # Enviar al llamador por WebSocket
             key = f"box_{sucursal.lower()}"
-            ws = llamadores_activados.get(key)
-            if ws:
-                await ws.send_json({
-                    "id": reg["id"],
-                    "name": reg["nombre"],
-                    "dni": reg["dni"],
-                    "fecha": reg["fecha"],
-                    "descripcion": reg["sucursal"],
-                    "box": box
-                })
+            mensaje = {
+                "id": reg["id"],
+                "name": reg["nombre"],
+                "dni": reg["dni"],
+                "fecha": reg["fecha"],
+                "descripcion": reg["sucursal"],
+                "box": box
+            }
             
-            # Notificar a los pre-llamadores conectados sobre el cambio
+            # Enviar a TODOS los llamadores conectados para esta sucursal
+            if key in llamadores_activados and llamadores_activados[key]:
+                websockets_con_error = []
+                for idx, ws in enumerate(llamadores_activados[key]):
+                    try:
+                        await ws.send_json(mensaje)
+                        print(f"Mensaje enviado a llamador {idx+1} de {key}")
+                    except Exception as e:
+                        print(f"Error al enviar a llamador {idx+1}: {e}")
+                        websockets_con_error.append(ws)
+                
+                # Limpiar websockets con error
+                for ws in websockets_con_error:
+                    if ws in llamadores_activados[key]:
+                        llamadores_activados[key].remove(ws)
+            
+            # Notificar a los pre-llamadores (código existente)
             if sucursal.lower() in prellamadores_activados:
                 notificacion = {
                     "action": "actualizar_registro",
@@ -1069,7 +1013,7 @@ async def llamar_registro(request: Request, id: int, registro_id: str = Form(...
                     try:
                         await ws.send_json(notificacion)
                     except:
-                        continue  # Si falla, continuamos con el siguiente websocket
+                        continue
                 
             break
     return RedirectResponse("/pre-llamador/1", status_code=303)
@@ -1077,60 +1021,95 @@ async def llamar_registro(request: Request, id: int, registro_id: str = Form(...
 
 @app.post("/repetir-llamado/{id}")
 async def repetir_llamado(
-    request: Request, id: int,
+    request: Request,
+    id: int,
     registro_id: str = Form(...),
     box: str = Form(...),
     sucursal: str = Form(...)
 ):
-    print(f"Repetir llamado para: registro_id={registro_id}, box={box}, sucursal={sucursal}")
-    print(registros_disponibles)
+    print(f"Repetir llamado recibido: registro_id={registro_id}, box={box}, sucursal={sucursal}")
+
+    # Validar entrada
+    if not registro_id or not box or not sucursal:
+        raise HTTPException(status_code=400, detail="Faltan parámetros requeridos: registro_id, box o sucursal")
+
     # Buscar el registro existente
+    registro_encontrado = None
     for reg in registros_disponibles:
-        print("Registro evaluado: " + reg["id"])
         if reg["id"] == registro_id:
-            # Actualizar el box de llamado si es diferente
-            reg["box_llamado"] = box
-            
-            # Enviar al llamador activo de la sucursal
-            key = f"box_{sucursal.lower()}"
-            ws = llamadores_activados.get(key)
-            if ws:
-                try:
-                    mensaje = {
-                        "id": reg["id"],
-                        "name": reg["nombre"],
-                        "dni": reg["dni"],
-                        "fecha": reg["fecha"],
-                        "descripcion": reg["sucursal"],
-                        "box": box,
-                        "repetido": True  # Indicador para el front-end
-                    }
-                    await ws.send_json(mensaje)
-                    #print(f"Mensaje enviado al box {key}: {mensaje}")
-                    
-                    # Notificar a los pre-llamadores conectados sobre el cambio
-                    if sucursal.lower() in prellamadores_activados:
-                        notificacion = {
-                            "action": "actualizar_registro",
-                            "registro": reg
-                        }
-                        for prellamador_ws in prellamadores_activados[sucursal.lower()]:
-                            try:
-                                await prellamador_ws.send_json(notificacion)
-                            except Exception as e:
-                                print(f"Error al notificar a pre-llamador: {e}")
-                                continue
-                except Exception as e:
-                    print(f"Error al enviar por WebSocket a {key}: {e}")
-            else:
-                print(f"No se encontró WebSocket para el box {key}")
+            registro_encontrado = reg
             break
-    else:
+
+    if not registro_encontrado:
         print(f"No se encontró el registro con ID {registro_id}")
+        raise HTTPException(status_code=404, detail=f"Registro con ID {registro_id} no encontrado")
+
+    # Actualizar el box de llamado
+    registro_encontrado["box_llamado"] = box
+
+    # Enviar a TODOS los llamadores activos de la sucursal
+    key = f"box_{sucursal.lower()}"
+    mensaje = {
+        "id": registro_encontrado["id"],
+        "name": registro_encontrado["nombre"],
+        "dni": registro_encontrado["dni"],
+        "fecha": registro_encontrado["fecha"],
+        "descripcion": registro_encontrado["sucursal"],
+        "box": box,
+        "repetido": True
+    }
     
-    # Redireccionar de vuelta a la página
+    # Verificar si hay llamadores conectados
+    if key not in llamadores_activados or not llamadores_activados[key]:
+        print(f"No se encontraron llamadores para el box {key}")
+        raise HTTPException(status_code=503, detail=f"No hay llamadores activos para la sucursal {sucursal}")
+    
+    # Enviar a todos los llamadores conectados
+    websockets_con_error = []
+    for idx, ws in enumerate(llamadores_activados[key]):
+        try:
+            await ws.send_json(mensaje)
+            print(f"Mensaje enviado a llamador {idx+1} de {key}")
+        except Exception as e:
+            print(f"Error al enviar a llamador {idx+1}: {e}")
+            websockets_con_error.append(ws)
+    
+    # Limpiar websockets con error
+    for ws in websockets_con_error:
+        if ws in llamadores_activados[key]:
+            llamadores_activados[key].remove(ws)
+
+    # Notificar a los pre-llamadores conectados sobre el cambio
+    if sucursal.lower() in prellamadores_activados:
+        notificacion = {
+            "action": "actualizar_registro",
+            "registro": registro_encontrado
+        }
+        for prellamador_ws in prellamadores_activados[sucursal.lower()]:
+            try:
+                await prellamador_ws.send_json(notificacion)
+            except Exception as e:
+                print(f"Error al notificar a pre-llamador: {e}")
+                continue
+
+    print(f"Repetición de llamado exitosa para registro {registro_id}")
     return RedirectResponse(f"/pre-llamador/{id}", status_code=303)
 
 
-
-# ---------------
+@app.get("/diagnostico/{id}")
+async def diagnostico(id: int):
+    """Ruta para diagnosticar las conexiones WebSocket activas"""
+    resultado = {
+        "llamadores": {},
+        "prellamadores": {}
+    }
+    
+    # Contar llamadores activos
+    for key, conexiones in llamadores_activados.items():
+        resultado["llamadores"][key] = len(conexiones)
+    
+    # Contar prellamadores activos
+    for key, conexiones in prellamadores_activados.items():
+        resultado["prellamadores"][key] = len(conexiones)
+    
+    return resultado
