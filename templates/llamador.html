@@ -446,16 +446,6 @@
                     robustSocket.connect();
                 }
             });
-            
-            // Y capturar más detalles en el evento de error
-            this.socket.onerror = (error) => {
-                this.log(`Error en WebSocket: ${JSON.stringify(error)}`);
-                console.error('Error completo:', error);
-                
-                if (this.statusCallback) {
-                    this.statusCallback('error', error);
-                }
-            };
 
             return robustSocket;
         }
