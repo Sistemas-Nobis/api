@@ -397,16 +397,6 @@
             console.log('Host:', window.location.host);
             console.log('Protocolo:', window.location.protocol);
             console.log('URL del WebSocket:', wsUrl);
-
-            // Y capturar más detalles en el evento de error
-            this.socket.onerror = (error) => {
-                this.log(`Error en WebSocket: ${JSON.stringify(error)}`);
-                console.error('Error completo:', error);
-                
-                if (this.statusCallback) {
-                    this.statusCallback('error', error);
-                }
-            };
             
             // Crear nueva instancia de WebSocket robusto
             robustSocket = new RobustWebSocket(wsUrl, {
@@ -457,6 +447,16 @@
                 }
             });
             
+            // Y capturar más detalles en el evento de error
+            this.socket.onerror = (error) => {
+                this.log(`Error en WebSocket: ${JSON.stringify(error)}`);
+                console.error('Error completo:', error);
+                
+                if (this.statusCallback) {
+                    this.statusCallback('error', error);
+                }
+            };
+
             return robustSocket;
         }
 
