@@ -379,6 +379,17 @@
 
         // Conectar al WebSocket de forma robusta
         function conectarWebSocketRobusto(sucursal) {
+            
+            // Cerrar conexión existente si hay una
+            if (robustSocket) {
+                console.log('Cerrando WebSocket anterior');
+                robustSocket.close();
+                robustSocket = null;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `https://${window.location.host}/ws/${encodeURIComponent(sucursal.toLowerCase())}`;
+            console.log(`Conectando a WebSocket robusto: ${wsUrl}`);
 
             // Agregar esto antes de crear el WebSocket
             console.log('URL de la página:', window.location.href);
@@ -395,17 +406,6 @@
                     this.statusCallback('error', error);
                 }
             };
-
-            // Cerrar conexión existente si hay una
-            if (robustSocket) {
-                console.log('Cerrando WebSocket anterior');
-                robustSocket.close();
-                robustSocket = null;
-            }
-            
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `wss://api.nobis.com.ar/ws/${encodeURIComponent(sucursal.toLowerCase())}`;
-            console.log(`Conectando a WebSocket robusto: ${wsUrl}`);
             
             // Crear nueva instancia de WebSocket robusto
             robustSocket = new RobustWebSocket(wsUrl, {
