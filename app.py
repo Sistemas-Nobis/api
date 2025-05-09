@@ -807,7 +807,7 @@ llamadores_activados = {}  # clave: box_sucursal → websocket
 prellamadores_activados = {}  # clave: sucursal → lista de websockets
 websockets_conectados = []
 
-# === WebSocket llamador ===a
+# === WebSocket llamador ===
 @app.websocket("/ws/{sucursal}")
 async def websocket_llamador(websocket: WebSocket, sucursal: str):
     key = f"box_{sucursal.lower()}"
