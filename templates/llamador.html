@@ -216,6 +216,7 @@
                     };
                 } catch (error) {
                     this.log(`Error al crear WebSocket: ${error.message}`);
+                    console.error('Error completo:', error);
                     this.scheduleReconnect();
                 }
             }
@@ -388,7 +389,7 @@
             }
             
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `https://${window.location.host}/ws/${encodeURIComponent(sucursal.toLowerCase())}`;
+            const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(sucursal.toLowerCase())}`;
             console.log(`Conectando a WebSocket robusto: ${wsUrl}`);
 
             // Agregar esto antes de crear el WebSocket
