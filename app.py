@@ -22,11 +22,24 @@ from config import verify_secret_key
 from models import *
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
     version="6.0.0",
+)
+
+origenes = [
+    "https://api.nobis.com.ar"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # o ["*"] para pruebas
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Montar la carpeta static
