@@ -650,19 +650,11 @@ async def tipo_beneficiario(dni: int):
 
     # Definir la consulta SQL
     query = f"""
-    WITH BenefcambioWithRowNumber AS (
-        SELECT ben_id, os_id, plan_id, tipoBen_id, ROW_NUMBER() OVER (PARTITION BY ben_id ORDER BY fecha_cambio DESC) AS rn  
-        FROM BenefCambio)  
-    SELECT DISTINCT
-        B.*,
-        C.tipoBen_id,
-        C.tipoBen_nom
-    FROM BenefcambioWithRowNumber D  
-    LEFT JOIN benef B ON D.ben_id = B.ben_id      
-    LEFT JOIN TiposBenef C ON D.tipoBen_id = C.tipoBen_id
-    LEFT OUTER JOIN benefagecta BA ON BA.ben_gr_id = B.ben_gr_id
-    LEFT OUTER JOIN v_consultapadronnobis V ON V.doc_id = B.doc_id  
-    WHERE D.rn = 1 AND B.numero = {dni}
+    SELECT TOP 1 B.*, T.tipoBen_id, T.tipoBen_nom FROM BenefCambio AS C
+    LEFT JOIN TiposBenef AS T ON C.tipoBen_id = T.tipoBen_id
+    INNER JOIN benef AS B ON B.ben_id = C.ben_id
+    WHERE B.numero = {dni}
+    ORDER BY C.bc_fecha DESC
     """
     
     # Ejecutar la consulta y convertir los resultados a JSON
