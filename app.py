@@ -772,18 +772,35 @@ async def tipos_de_beneficiario(id: int):
 
         except pyodbc.Error as e:
             raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
-
-        # Definir la consulta SQL
-        query = f"""
-        SELECT tipoBen_id, tipoBen_nom FROM TiposBenef
-        """
         
         try:
+
+            tipos_especificos = [
+                'MT - OSIM',
+                'MT - OSSACRA',
+                'RD - OSPSMBA',
+                'RD - OSIM',
+                'RD - OSSACRA',
+                'RD - OSPYSA',
+                'RD - RELACION DE DEPENCIA',
+                'SD - SERVICIO DOMESTICO OSSACRA',
+                'PP - PREPAGO'
+            ]
+
+            # Convertir la lista a formato para consulta SQL
+            tipos_str = "', '".join(tipos_especificos)
+
+            # Definir la consulta SQL
+            query = f"""
+            SELECT tipoBen_id, tipoBen_nom FROM TiposBenef
+            WHERE tipoBen_nom IN ('{tipos_str}')
+            """
+
             df = pd.read_sql_query(query, conn)
 
             # Filtrar solo los que empiezan con MT, PP, RD o SD (ignorando espacios al inicio)
-            df = df[df['tipoBen_nom'].str.strip().str.startswith(('MT', 'PP', 'RD', 'SD'))]
-
+            #df = df[df['tipoBen_nom'].str.strip().str.startswith(('MT', 'PP', 'RD', 'SD'))]
+            
             result_json = df.to_json(orient="records", date_format="iso")
             return json.loads(result_json)
 
