@@ -782,7 +782,7 @@ async def tipos_de_beneficiario(id: int):
                 'RD - OSIM',
                 'RD - OSSACRA',
                 'RD - OSPYSA',
-                'RD - RELACION DE DEPENCIA',
+                'RD - RELACION DE DEPENDENCIA',
                 'SD - SERVICIO DOMESTICO OSSACRA',
                 'PP - PREPAGO'
             ]
