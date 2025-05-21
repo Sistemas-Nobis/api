@@ -985,8 +985,9 @@ async def nomenclador(id: int):
         query = f"""
         SELECT A.nom_id, B.nom_nom, A.nom_cod, A.nom_nom AS cod_nom FROM nomenclador AS A
         LEFT JOIN tiponom AS B ON A.nom_id = B.nom_id
+        WHERE A.nom_id NOT IN (26,4)
         """
-        
+        # Excluye nomencladores "NO USAR (26)" y "FARMACIA (4)"
         # Ejecutar la consulta y convertir los resultados a JSON
         try:
             df = pd.read_sql_query(query, conn)
