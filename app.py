@@ -814,8 +814,8 @@ async def tipos_de_beneficiario(id: int):
         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
     
 # Nomenclador
-@app.get("/nomenclador/{codigo}", tags=["Consultas | Macena DB"])
-async def nomenclador_endpoint(codigo: int):
+@app.get("/nomencod/{codigo}", tags=["Consultas | Macena DB"])
+async def nomenclador_por_codigo(codigo: int):
     contraseña = load_password()
  
     try:
@@ -849,10 +849,9 @@ async def nomenclador_endpoint(codigo: int):
         conn.close()
  
  
- 
 # Ubicacion
 @app.get("/ubicacion/{dni}", tags=["Consultas | Macena DB"])
-async def ubicacion_endpoint(dni: int):
+async def ubicacion(dni: int):
     contraseña = load_password()
  
     try:
@@ -884,7 +883,7 @@ async def ubicacion_endpoint(dni: int):
  
 # Plan
 @app.get("/plan_afiliado/{plan_nom}", tags=["Consultas | Macena DB"])
-async def plan_afiliado_endpoint(plan_nom: str):
+async def plan_afiliado(plan_nom: str):
     contraseña = load_password()
  
     try:
@@ -910,11 +909,10 @@ async def plan_afiliado_endpoint(plan_nom: str):
     finally:
         conn.close()
  
- 
- 
+
 # Origenes Aranceles
 @app.get("/origenes_aranceles/{os_id}/{cod_pra}/{nom_pra}/{prov_id}/{loc_id}/{plan_id}", tags=["Consultas | Macena DB"])
-async def origenes_aranceles_endpoint(os_id: int, cod_pra: int, nom_pra: int, prov_id: int, loc_id: int, plan_id: int):
+async def origenes_aranceles(os_id: int, cod_pra: int, nom_pra: int, prov_id: int, loc_id: int, plan_id: int):
     contraseña = load_password()
  
     try:
@@ -971,3 +969,34 @@ async def origenes_aranceles_endpoint(os_id: int, cod_pra: int, nom_pra: int, pr
    
     finally:
         conn.close()
+
+
+@app.get("/nomenclador/{id}", tags=["Consultas | Macena DB"])
+async def nomenclador(id: int):
+    contraseña = load_password()
+    if id == 1:
+        try:
+            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+        except pyodbc.Error as e:
+            raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+        # Definir la consulta SQL
+        query = f"""
+        SELECT A.nom_id, B.nom_nom, A.nom_cod, A.nom_nom AS cod_nom FROM nomenclador AS A
+        LEFT JOIN tiponom AS B ON A.nom_id = B.nom_id
+        """
+        
+        # Ejecutar la consulta y convertir los resultados a JSON
+        try:
+            df = pd.read_sql_query(query, conn)
+            result_json = df.to_json(orient="records", date_format="iso")
+            return json.loads(result_json)
+        
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+        
+        finally:
+            conn.close()
+    else:
+        raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
