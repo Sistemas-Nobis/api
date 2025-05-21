@@ -813,3 +813,161 @@ async def tipos_de_beneficiario(id: int):
     else:
         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
     
+# Nomenclador
+@app.get("/nomenclador/{codigo}", tags=["Consultas | Macena DB"])
+async def nomenclador_endpoint(codigo: int):
+    contraseña = load_password()
+ 
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+ 
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+ 
+    # Definir la consulta SQL
+    query = f"""
+    SELECT
+        A.nom_cod,
+        A.nom_nom AS Nombre,
+        A.nom_id,
+        B.nom_nom AS TipoNomenclador
+    FROM nomenclador AS A
+    LEFT JOIN tiponom AS B ON A.nom_id = B.nom_id
+    WHERE A.nom_cod = ?
+    ORDER BY A.nom_cod DESC
+    """
+ 
+      # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn, params=[codigo])
+        return json.loads(df.to_json(orient="records"))
+    except Exception as e:
+        print("Error al ejecutar la consulta SQL", e)
+        return []
+   
+    finally:
+        conn.close()
+ 
+ 
+ 
+# Ubicacion
+@app.get("/ubicacion/{dni}", tags=["Consultas | Macena DB"])
+async def ubicacion_endpoint(dni: int):
+    contraseña = load_password()
+ 
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+ 
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+ 
+    # Definir la consulta SQL
+    query = f"""
+    SELECT L.loc_id, L.loc_nombre, P.prov_id, P.prov_nombre FROM benef AS A
+    LEFT JOIN benradic AS B ON A.ben_id = B.ben_id
+    LEFT JOIN localidades AS L ON B.loc_id = L.loc_id
+    LEFT JOIN provincias AS P ON L.prov_id = P.prov_id
+    WHERE A.numero = ?
+    """
+ 
+      # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn, params=[dni])
+        return json.loads(df.to_json(orient="records"))
+    except Exception as e:
+        print("Error al ejecutar la consulta SQL", e)
+        return []
+   
+    finally:
+        conn.close()
+ 
+ 
+# Plan
+@app.get("/plan_afiliado/{plan_nom}", tags=["Consultas | Macena DB"])
+async def plan_afiliado_endpoint(plan_nom: str):
+    contraseña = load_password()
+ 
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+ 
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+ 
+    # Definir la consulta SQL
+    query = f"""
+    SELECT plan_nombre, plan_id FROM planes
+    WHERE plan_nombre LIKE '{plan_nom}'
+    """
+ 
+      # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn)
+        return json.loads(df.to_json(orient="records"))
+    except Exception as e:
+        print("Error al ejecutar la consulta SQL", e)
+        return []
+   
+    finally:
+        conn.close()
+ 
+ 
+ 
+# Origenes Aranceles
+@app.get("/origenes_aranceles/{os_id}/{cod_pra}/{nom_pra}/{prov_id}/{loc_id}/{plan_id}", tags=["Consultas | Macena DB"])
+async def origenes_aranceles_endpoint(os_id: int, cod_pra: int, nom_pra: int, prov_id: int, loc_id: int, plan_id: int):
+    contraseña = load_password()
+ 
+    try:
+        conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+ 
+    except pyodbc.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+ 
+    # Definir la consulta SQL
+    query = f"""
+    SELECT TOP 20
+    TN.nom_nom,
+    CF.cta_cdesde AS código,
+    N.nom_nom AS nombre_practica,
+    SUM(CF.cta_esp + CF.cta_ayu + CF.cta_ane + CF.cta_gto) AS total,
+    O.ori_nom,
+    MF.vigencia,
+    tl.tab_nom,
+    L.loc_nombre,
+    PR.prov_nombre
+    FROM ctafac CF
+    LEFT JOIN nomenclador N ON N.nom_cod = CF.cta_cdesde
+    LEFT JOIN tiponom TN ON TN.nom_id = N.nom_id
+    LEFT JOIN tablas TL ON TL.cta_id = CF.cta_id
+    LEFT JOIN medfac MF ON MF.tab_id = TL.tab_id
+    LEFT JOIN origenes O ON O.ori_id = MF.ori_id
+    LEFT JOIN localidades L ON L.loc_id = O.loc_id
+    LEFT JOIN provincias PR ON PR.prov_id = L.prov_id
+    LEFT JOIN ExcepAutoExcluirOSPlan EO ON EO.Ori_id = O.ori_id
+    WHERE O.ori_nom IS NOT NULL AND MF.os_id = {os_id} AND MF.pre_id = 0
+    AND CF.cta_cdesde = {cod_pra} AND TN.nom_id = {nom_pra}
+    AND PR.prov_id = {prov_id} AND L.loc_id = {loc_id}
+    AND NOT EXISTS (
+        SELECT 1
+        FROM ExcepAutoExcluirOSPlan EO2
+        WHERE EO2.ori_id = O.ori_id AND EO2.plan_id = {plan_id})
+    AND MF.vigencia = (
+        SELECT MAX(MF2.vigencia)
+        FROM medfac MF2
+        WHERE MF2.vigencia >= CAST(GETDATE() AS DATE))
+    GROUP BY CF.cta_cdesde, N.nom_nom, TN.nom_nom, O.ori_nom,
+        MF.vigencia, tl.tab_nom, L.loc_nombre, PR.prov_nombre
+    ORDER BY total ASC
+    """
+ 
+      # Ejecutar la consulta y convertir los resultados a JSON
+    try:
+        df = pd.read_sql_query(query, conn, parse_dates=False)
+        df["vigencia"] = df["vigencia"].astype(str).str[:10]
+        return json.loads(df.to_json(orient="records"))
+    except Exception as e:
+        print("Error al ejecutar la consulta SQL", e)
+        return []
+   
+    finally:
+        conn.close()
