@@ -61,5 +61,5 @@ async def token_de_acceso(id:int, form_data: OAuth2PasswordRequestForm = Depends
 
 permisos_rol = {
     "admin": ["*"],  # ADMIN
-    "cuoma": ["/movfpago/update/1"],  # CUOMA
+    "cuoma": ["/movfpago/update/1/{grupo_id}"],  # CUOMA
 }

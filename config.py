@@ -23,10 +23,42 @@ def load_password():
         return None
 
 
+def load_password_admin():
+    try:
+        with open(PASSWORD_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get("admin")
+    except FileNotFoundError:
+        return None
+
+
 def update_password(new_password):
-    """Actualizar la contraseña en el archivo JSON."""
+    """Actualizar solo la clave 'password' en el archivo JSON."""
+    data = {}
+    with open(PASSWORD_FILE, 'r') as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            pass  # si el archivo está vacío o mal formado, lo reiniciamos
+
+    data["password"] = new_password
+
     with open(PASSWORD_FILE, 'w') as f:
-        json.dump({"password": new_password}, f)
+        json.dump(data, f, indent=4)
+
+
+def update_password_admin(new_password):
+    data = {}
+    with open(PASSWORD_FILE, 'r') as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            pass
+
+    data["admin"] = new_password
+
+    with open(PASSWORD_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

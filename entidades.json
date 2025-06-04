@@ -1,0 +1,298 @@
+[
+    {
+        "codigo":"007",
+        "entidad":"BANCO DE GALICIA Y BUENOS AIRES S.A.U."
+    },
+    {
+        "codigo":"011",
+        "entidad":"BANCO DE LA NACION ARGENTINA"
+    },
+    {
+        "codigo":"014",
+        "entidad":"BANCO DE LA PROVINCIA DE BUENOS AIRES"
+    },
+    {
+        "codigo":"015",
+        "entidad":"INDUSTRIAL AND COMMERCIAL BANK OF CHINA"
+    },
+    {
+        "codigo":"016",
+        "entidad":"CITIBANK N.A."
+    },
+    {
+        "codigo":"017",
+        "entidad":"BANCO BBVA ARGENTINA S.A."
+    },
+    {
+        "codigo":"020",
+        "entidad":"BANCO DE LA PROVINCIA DE CORDOBA S.A."
+    },
+    {
+        "codigo":"027",
+        "entidad":"BANCO SUPERVIELLE S.A."
+    },
+    {
+        "codigo":"029",
+        "entidad":"BANCO DE LA CIUDAD DE BUENOS AIRES"
+    },
+    {
+        "codigo":"034",
+        "entidad":"BANCO PATAGONIA S.A."
+    },
+    {
+        "codigo":"044",
+        "entidad":"BANCO HIPOTECARIO S.A."
+    },
+    {
+        "codigo":"045",
+        "entidad":"BANCO DE SAN JUAN S.A."
+    },
+    {
+        "codigo":"065",
+        "entidad":"BANCO MUNICIPAL DE ROSARIO"
+    },
+    {
+        "codigo":"072",
+        "entidad":"BANCO SANTANDER ARGENTINA S.A."
+    },
+    {
+        "codigo":"083",
+        "entidad":"BANCO DEL CHUBUT S.A."
+    },
+    {
+        "codigo":"086",
+        "entidad":"BANCO DE SANTA CRUZ S.A."
+    },
+    {
+        "codigo":"093",
+        "entidad":"BANCO DE LA PAMPA SOCIEDAD DE ECONOMÍA M"
+    },
+    {
+        "codigo":"094",
+        "entidad":"BANCO DE CORRIENTES S.A."
+    },
+    {
+        "codigo":"097",
+        "entidad":"BANCO PROVINCIA DEL NEUQUÉN SOCIEDAD ANÓ"
+    },
+    {
+        "codigo":"131",
+        "entidad":"BANK OF CHINA LIMITED SUCURSAL BUENOS AI"
+    },
+    {
+        "codigo":"143",
+        "entidad":"BRUBANK S.A.U."
+    },
+    {
+        "codigo":"147",
+        "entidad":"BIBANK S.A."
+    },
+    {
+        "codigo":"150",
+        "entidad":"BANCO GGAL SA"
+    },
+    {
+        "codigo":"165",
+        "entidad":"JPMORGAN CHASE BANK, NATIONAL ASSOCIATIO"
+    },
+    {
+        "codigo":"191",
+        "entidad":"BANCO CREDICOOP COOPERATIVO LIMITADO"
+    },
+    {
+        "codigo":"198",
+        "entidad":"BANCO DE VALORES S.A."
+    },
+    {
+        "codigo":"247",
+        "entidad":"BANCO ROELA S.A."
+    },
+    {
+        "codigo":"254",
+        "entidad":"BANCO MARIVA S.A."
+    },
+    {
+        "codigo":"266",
+        "entidad":"BNP PARIBAS"
+    },
+    {
+        "codigo":"268",
+        "entidad":"BANCO PROVINCIA DE TIERRA DEL FUEGO"
+    },
+    {
+        "codigo":"269",
+        "entidad":"BANCO DE LA REPUBLICA ORIENTAL DEL URUGU"
+    },
+    {
+        "codigo":"277",
+        "entidad":"BANCO SAENZ S.A."
+    },
+    {
+        "codigo":"281",
+        "entidad":"BANCO MERIDIAN S.A."
+    },
+    {
+        "codigo":"285",
+        "entidad":"BANCO MACRO S.A."
+    },
+    {
+        "codigo":"299",
+        "entidad":"BANCO COMAFI SOCIEDAD ANONIMA"
+    },
+    {
+        "codigo":"300",
+        "entidad":"BANCO DE INVERSION Y COMERCIO EXTERIOR S"
+    },
+    {
+        "codigo":"301",
+        "entidad":"BANCO PIANO S.A."
+    },
+    {
+        "codigo":"305",
+        "entidad":"BANCO JULIO SOCIEDAD ANONIMA"
+    },
+    {
+        "codigo":"309",
+        "entidad":"BANCO RIOJA SOCIEDAD ANONIMA UNIPERSONAL"
+    },
+    {
+        "codigo":"310",
+        "entidad":"BANCO DEL SOL S.A."
+    },
+    {
+        "codigo":"311",
+        "entidad":"NUEVO BANCO DEL CHACO S. A."
+    },
+    {
+        "codigo":"312",
+        "entidad":"BANCO VOII S.A."
+    },
+    {
+        "codigo":"315",
+        "entidad":"BANCO DE FORMOSA S.A."
+    },
+    {
+        "codigo":"319",
+        "entidad":"BANCO CMF S.A."
+    },
+    {
+        "codigo":"321",
+        "entidad":"BANCO DE SANTIAGO DEL ESTERO S.A."
+    },
+    {
+        "codigo":"322",
+        "entidad":"BANCO INDUSTRIAL S.A."
+    },
+    {
+        "codigo":"330",
+        "entidad":"NUEVO BANCO DE SANTA FE SOCIEDAD ANONIMA"
+    },
+    {
+        "codigo":"331",
+        "entidad":"BANCO CETELEM ARGENTINA S.A."
+    },
+    {
+        "codigo":"332",
+        "entidad":"BANCO DE SERVICIOS FINANCIEROS S.A."
+    },
+    {
+        "codigo":"338",
+        "entidad":"BANCO DE SERVICIOS Y TRANSACCIONES S.A."
+    },
+    {
+        "codigo":"339",
+        "entidad":"RCI BANQUE S.A."
+    },
+    {
+        "codigo":"340",
+        "entidad":"BACS BANCO DE CREDITO Y SECURITIZACION S"
+    },
+    {
+        "codigo":"341",
+        "entidad":"BANCO MASVENTAS S.A."
+    },
+    {
+        "codigo":"384",
+        "entidad":"WILOBANK S.A.U."
+    },
+    {
+        "codigo":"386",
+        "entidad":"NUEVO BANCO DE ENTRE RÍOS S.A."
+    },
+    {
+        "codigo":"389",
+        "entidad":"BANCO COLUMBIA S.A."
+    },
+    {
+        "codigo":"426",
+        "entidad":"BANCO BICA S.A."
+    },
+    {
+        "codigo":"431",
+        "entidad":"BANCO COINAG S.A."
+    },
+    {
+        "codigo":"432",
+        "entidad":"BANCO DE COMERCIO S.A."
+    },
+    {
+        "codigo":"435",
+        "entidad":"BANCO SUCREDITO REGIONAL S.A.U."
+    },
+    {
+        "codigo":"448",
+        "entidad":"BANCO DINO S.A."
+    },
+    {
+        "codigo":"44077",
+        "entidad":"COMPAÑIA FINANCIERA ARGENTINA S.A."
+    },
+    {
+        "codigo":"44088",
+        "entidad":"VOLKSWAGEN FINANCIAL SERVICES COMPAÑIA F"
+    },
+    {
+        "codigo":"44092",
+        "entidad":"FCA COMPAÑIA FINANCIERA S.A."
+    },
+    {
+        "codigo":"44093",
+        "entidad":"GPAT COMPAÑIA FINANCIERA S.A.U."
+    },
+    {
+        "codigo":"44094",
+        "entidad":"MERCEDES-BENZ COMPAÑÍA FINANCIERA ARGENT"
+    },
+    {
+        "codigo":"44095",
+        "entidad":"ROMBO COMPAÑÍA FINANCIERA S.A."
+    },
+    {
+        "codigo":"44096",
+        "entidad":"JOHN DEERE CREDIT COMPAÑÍA FINANCIERA S."
+    },
+    {
+        "codigo":"44098",
+        "entidad":"PSA FINANCE ARGENTINA COMPAÑÍA FINANCIER"
+    },
+    {
+        "codigo":"44099",
+        "entidad":"TOYOTA COMPAÑÍA FINANCIERA DE ARGENTINA"
+    },
+    {
+        "codigo":"45030",
+        "entidad":"NARANJA DIGITAL COMPAÑÍA FINANCIERA S.A."
+    },
+    {
+        "codigo":"45056",
+        "entidad":"MONTEMAR COMPAÑIA FINANCIERA S.A."
+    },
+    {
+        "codigo":"45072",
+        "entidad":"REBA COMPAÑIA FINANCIERA S.A."
+    },
+    {
+        "codigo":"65203",
+        "entidad":"CRÉDITO REGIONAL COMPAÑÍA FINANCIERA S.A"
+    }
+]

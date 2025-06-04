@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query, Depends, status, Request, Security, WebSocket
 from pydantic import BaseModel
-from config import load_password, update_password
+from config import load_password, update_password, load_password_admin, update_password_admin
 from funciones import obtener_token_gecros, obtener_token_wise
 from fastapi.responses import StreamingResponse, RedirectResponse
 import requests
@@ -23,6 +23,7 @@ from models import *
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import re
 
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
@@ -73,17 +74,31 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # Dependencia para verificar permisos por rol
 async def check_permissions(request: Request, current_user: dict = Depends(get_current_user)):
     role = current_user.get("role")
-    endpoint = request.url.path  # Obtiene la ruta solicitada automáticamente
-    
-    # Verificar si el rol tiene permisos para acceder al endpoint
-    if "*" not in permisos_rol[role] and endpoint not in permisos_rol[role]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permiso a esta ruta.")
-    
-    return current_user
+    endpoint = request.url.path
+
+    rutas_permitidas = permisos_rol.get(role, [])
+
+    # Permitir acceso total si tiene '*'
+    if "*" in rutas_permitidas:
+        return current_user
+
+    for ruta in rutas_permitidas:
+        # Convertir la ruta tipo FastAPI a regex
+        # Ej: /movfpago/update/1/{grupo_id} → ^/movfpago/update/1/\d+$
+        regex = re.sub(r"{[^/]+}", r"\\d+", ruta)
+        regex = f"^{regex}$"
+        if re.match(regex, endpoint):
+            return current_user
+
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permiso a esta ruta.")
+
 
 # Definir un modelo para la entrada de la nueva contraseña
 class PasswordUpdate(BaseModel):
     password: str
+
+class PasswordUpdateAdmin(BaseModel):
+    admin: str
 
 # Configurar FastAPICache al crear la aplicación
 FastAPICache.init(InMemoryBackend())
@@ -118,6 +133,17 @@ async def actualizar_contraseña(password_update: PasswordUpdate):
     # Actualizar la contraseña en el archivo
     update_password(new_password)
     return {"Mensaje": "Password updated successfully"}
+
+
+@app.post("/actualizar_contrasena_admin", tags=["Contraseña | Macena DB ADMIN"])
+async def actualizar_contraseña_admin(password_update: PasswordUpdateAdmin):
+    new_password = password_update.admin
+    if not new_password:
+        raise HTTPException(status_code=400, detail="No se ha proporcionado una nueva contraseña")
+    
+    # Actualizar la contraseña en el archivo
+    update_password_admin(new_password)
+    return {"Mensaje": "Password ADMIN updated successfully"}
 
 
 # Endpoint con consultas de aportes para Widget de retención
@@ -587,42 +613,104 @@ async def dni_de_agente_de_cuenta(grupo_id: int):
 
 
 # Endpoint para actualizar los datos
-@app.put("/movfpago/update/{count}", tags=["Actualización | Macena DB"])
-async def actualizar_forma_de_pago(data: MovfPago, count: int, current_user: dict = Depends(check_permissions)):
+@app.post("/movfpago/update/{count}/{grupo_id}", tags=["Actualización | Macena DB"])
+async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, current_user: dict = Depends(check_permissions)):
     if count == 1:
     
         usuario = 'CUOMA'
-        contraseña = load_password()
+        contraseña = load_password_admin()
+
+        query = f"""
+            SELECT TOP 1 A.movfp_id, A.age_id, A.fpago_id, A.entfin_id, A.movfp_desde,
+            A.movfp_hasta, A.cbu, A.numero, A.vencimiento, B.ben_gr_id 
+            FROM movfpago AS A
+            LEFT JOIN benefagecta AS B ON A.age_id = B.agecta_id
+            WHERE B.ben_gr_id = {grupo_id}
+            ORDER BY movfp_id DESC
+            """
         
         try:
-            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=sistemas-admin;PWD={contraseña};TrustServerCertificate=yes")
             cursor = conn.cursor()
             
-            # Consulta SQL para realizar el UPDATE
+            # Busqueda de movimiento actual
+            df = pd.read_sql_query(query, conn)
+            
+            if not df.empty:
+                actual_movfp_id = df.loc[0, 'movfp_id']
+                #print(f"Mov_id: {actual_movfp_id}")
+                agente_id = df.loc[0, 'age_id']
+                #print(f"Agente ID: {agente_id}")
+                actual_fecha_desde = int(df.loc[0, 'movfp_desde'])
+            else:
+                actual_movfp_id = None
+                raise HTTPException(status_code=500, detail=f"Error sin agente de cuenta: {e}")
+
+            # Realizar UPDATE sobre movimiento actual
+            fecha_actual = int(datetime.today().strftime("%Y%m"))
+            #print(fecha_actual)
+
+            #print(actual_fecha_desde, fecha_actual)
+
+            if actual_fecha_desde == fecha_actual or actual_fecha_desde == (fecha_actual + 1):
+                raise HTTPException(status_code=500, detail=f"Movimiento invalido: actual {actual_fecha_desde} <= hoy {fecha_actual}")
+
             update_query = f"""
             UPDATE movfpago
-            SET age_id = ?, fpago_id = ?, entfin_id = ?, movfp_desde = ?, movfp_hasta = ?, cbu = ?, numero = ?, vencimiento = ?, movfp_UsuModi = ?, movfp_fecmodi = ?
-            WHERE movfp_id = ?
+            SET movfp_hasta = {fecha_actual},
+                movfp_Usumodi = 'CUOMA',
+                movfp_fecmodi = GETDATE()
+            WHERE movfp_id = {actual_movfp_id}
             """
+            try:
+                cursor.execute(update_query)
+                conn.commit()  # Muy importante para que se apliquen los cambios
+                #print("Update ejecutado correctamente.")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error al ejecutar el update: {e}")
             
-            # Ejecutar la consulta
-            cursor.execute(
-                update_query,
-                data.age_id,
-                data.fpago_id,
-                data.entfin_id,
-                data.movfp_desde,
-                data.movfp_hasta,
-                data.cbu,
-                data.numero,
-                data.vencimiento,
-                usuario,
-                datetime.now(),
-                data.movfp_id  # Cambia a la clave correcta si `movfp_id` es diferente
-            )
-            conn.commit()
+            nueva_movfp_desde = int(fecha_actual) + 1
+            #print(nueva_movfp_desde)
+
+            # Defaults
+            nueva_movfp_hasta = 290012
+            nro_auto = ''
+            agente_id = int(agente_id)
+
+            insert_query = f"""
+            INSERT INTO movfpago
+            (age_id, fpago_id, entfin_id, movfp_desde, movfp_hasta, cbu, numero, nro_auto, vencimiento, movfp_UsuAlta, movfp_fecalta)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            try:
+                # Forzamos a tomar la entidad GALICIA en TD.
+                if data.fpago_id == 3:
+                    entidad = 71
+                else:
+                    entidad = data.entfin_id
+
+                # Ejecutar la consulta
+                cursor.execute(
+                    insert_query,
+                    agente_id, # Agente de cuenta
+                    data.fpago_id, # Forma de pago
+                    entidad, # Entidad financiera
+                    nueva_movfp_desde, # Cierre de la anterior + 1
+                    nueva_movfp_hasta, # Cierre de actual = Fijo
+                    data.cbu, # CBU | Los CVU se rechazaran (revisar models.py)
+                    data.numero, # Número de tarjeta
+                    nro_auto,
+                    data.vencimiento, # Vencimiento de tarjeta
+                    usuario, # Usuario default
+                    datetime.now(), # Fecha actual
+                )
+                conn.commit()
+                
+                return {"mensaje": "Actualización exitosa",
+                        "entidad": f"{data.nombre_entidad}"}
             
-            return {"message": "Actualización exitosa"}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error al ejecutar la actualización: {e}")
         
         except pyodbc.Error as e:
             raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
