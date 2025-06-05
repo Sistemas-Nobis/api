@@ -872,7 +872,8 @@ async def tipos_de_beneficiario(id: int):
                 'RD - OSPYSA',
                 'RD - RELACION DE DEPENDENCIA',
                 'SD - SERVICIO DOMESTICO OSSACRA',
-                'PP - PREPAGO'
+                'PP - PREPAGO',
+                'RD - NOBIS'
             ]
 
             # Convertir la lista a formato para consulta SQL
