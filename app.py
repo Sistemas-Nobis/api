@@ -630,7 +630,8 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
             """
         
         try:
-            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=sistemas-admin;PWD={contraseña};TrustServerCertificate=yes")
+            #conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=sistemas-admin;PWD={contraseña};TrustServerCertificate=yes")
+            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=MACENATEST01;DATABASE=GecrosPruebas;UID=apitests;PWD=sistemasapi;TrustServerCertificate=yes")
             cursor = conn.cursor()
             
             # Busqueda de movimiento actual
@@ -683,7 +684,7 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
 
             # Validación de periodos
             if actual_fecha_desde > periodo_hasta:
-                raise HTTPException(status_code=500, detail=f"Movimiento invalido: no se puede cerrar la vigencia al {periodo_hasta} del registro anterior.")
+                raise HTTPException(status_code=500, detail=f"Ya existe un trámite en curso")
 
             # Realizar UPDATE sobre movimiento actual
             update_query = f"""
