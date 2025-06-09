@@ -28,7 +28,7 @@ import re
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
     description="Utilidades para automatizaciones de procesos.",
-    version="6.0.0",
+    version="7.0.0",
 )
 
 origenes = [
@@ -629,9 +629,10 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
             ORDER BY movfp_id DESC
             """
         
+        conn = None
         try:
             #conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=sistemas-admin;PWD={contraseña};TrustServerCertificate=yes")
-            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=MACENATEST01;DATABASE=GecrosPruebas;UID=apitests;PWD=sistemasapi;TrustServerCertificate=yes")
+            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=172.16.0.31;DATABASE=GecrosPruebas;UID=apitests;PWD=sistemasapi;TrustServerCertificate=yes")
             cursor = conn.cursor()
             
             # Busqueda de movimiento actual
@@ -754,7 +755,8 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
             raise HTTPException(status_code=500, detail=f"Error al ejecutar la actualización: {e}")
         
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     else:
         raise HTTPException(status_code=505, detail=f"Error al ejecutar la actualización: {e}")
