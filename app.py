@@ -645,19 +645,50 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
             else:
                 actual_movfp_id = None
                 raise HTTPException(status_code=500, detail=f"Error sin agente de cuenta: {e}")
+            
+            # Validar fecha de corte. TC: Día 10 - Debito: Día 16
+            periodo_actual = int(datetime.today().strftime("%Y%m"))
+            #print(f"Periodo actual: {periodo_actual}")
+
+            dia_actual = datetime.today().day
+            #print(f"Dia de hoy: {dia_actual}")
+
+            periodo_hasta = periodo_actual
+            if data.fpago_id == 2: # TC
+                #print("Tarjeta de credito")
+                if dia_actual <= 10:
+                    #print(f"La forma de pago actual se vencerá este mes. {periodo_hasta}")
+                    periodo_hasta = periodo_actual
+                else:
+                    periodo_hasta = periodo_hasta + 1
+                    #print(f"La forma de pago actual se vencerá el proximo mes. {periodo_hasta}")
+            
+            elif data.fpago_id == 3: # Debito
+                #print("Debito bancario")
+                if dia_actual <= 16:
+                    #print(f"La forma de pago actual se vencerá este mes. {periodo_hasta}")
+                    periodo_hasta = periodo_actual
+                else:
+                    periodo_hasta = periodo_hasta + 1
+                    #print(f"La forma de pago actual se vencerá el proximo mes. {periodo_hasta}")
+
+            else: # Contado
+                #print("Contado")
+                if dia_actual <= 18:
+                    #print(f"La forma de pago actual se vencerá este mes. {periodo_hasta}")
+                    periodo_hasta = periodo_actual
+                else:
+                    periodo_hasta = periodo_hasta + 1
+                    #print(f"La forma de pago actual se vencerá el proximo mes. {periodo_hasta}") 
+
+            # Validación de periodos
+            if actual_fecha_desde > periodo_hasta:
+                raise HTTPException(status_code=500, detail=f"Movimiento invalido: no se puede cerrar la vigencia al {periodo_hasta} del registro anterior.")
 
             # Realizar UPDATE sobre movimiento actual
-            fecha_actual = int(datetime.today().strftime("%Y%m"))
-            #print(fecha_actual)
-
-            #print(actual_fecha_desde, fecha_actual)
-
-            if actual_fecha_desde == fecha_actual or actual_fecha_desde == (fecha_actual + 1):
-                raise HTTPException(status_code=500, detail=f"Movimiento invalido: actual {actual_fecha_desde} <= hoy {fecha_actual}")
-
             update_query = f"""
             UPDATE movfpago
-            SET movfp_hasta = {fecha_actual},
+            SET movfp_hasta = {periodo_hasta},
                 movfp_Usumodi = 'CUOMA',
                 movfp_fecmodi = GETDATE()
             WHERE movfp_id = {actual_movfp_id}
@@ -669,7 +700,7 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error al ejecutar el update: {e}")
             
-            nueva_movfp_desde = int(fecha_actual) + 1
+            nueva_movfp_desde = int(periodo_hasta) + 1
             #print(nueva_movfp_desde)
 
             # Defaults
@@ -706,8 +737,11 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
                 )
                 conn.commit()
                 
-                return {"mensaje": "Actualización exitosa",
-                        "entidad": f"{data.nombre_entidad}"}
+                if data.fpago_id == 3:
+                    return {"mensaje": "Actualización exitosa",
+                            "entidad": f"{data.nombre_entidad}"}
+                else:
+                    return {"mensaje": "Actualización exitosa"}
             
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error al ejecutar la actualización: {e}")

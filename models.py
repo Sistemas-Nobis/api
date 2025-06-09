@@ -52,19 +52,19 @@ class MovfPago(BaseModel):
     #    return value
 
 
-    @field_validator("cbu")
+    @field_validator("cbu") # SOLO DEBITO
     def validate_cbu(cls, value: str, info: FieldValidationInfo) -> str:
         fpago_id = info.data.get("fpago_id")
         
         # Si fpago_id == 1, el campo CBU debe estar vacío
-        if fpago_id == 1:
+        if fpago_id == 1 or fpago_id == 2:
             if value != "":
-                raise ValueError("El campo 'cbu' debe estar vacío cuando 'fpago_id' es 1.")
+                raise ValueError("El campo 'cbu' debe estar vacío cuando 'fpago_id' es 1 o 2.")
             return value
         
         # Si fpago_id != 1, el CBU debe ser válido y no puede estar vacío
-        if fpago_id != 1 and not value.strip():
-            raise ValueError("El campo 'cbu' es requerido cuando 'fpago_id' no es 1.")
+        if fpago_id == 3 and not value.strip():
+            raise ValueError("El campo 'cbu' es requerido cuando 'fpago_id' es 3.")
         
         cbu_str = value.strip()
         
@@ -138,15 +138,16 @@ class MovfPago(BaseModel):
         return self
 
     
-    # Validador para el campo numero (tarjeta de débito/crédito)
+    # Validador para el campo numero (tarjeta de crédito)
     @field_validator("numero")
     def validate_numero(cls, value, info: FieldValidationInfo):
         fpago_id = info.data.get("fpago_id")  # Accede a otros campos mediante info.data
         entfin_id = info.data.get("entfin_id")
 
-        if fpago_id == 1 and value != "":
-            raise ValueError("El campo 'numero debe estar vacío cuando 'fpago_id' es 1.")
-        if fpago_id in (2, 3) and not value.isdigit():
+        if fpago_id == 1 or fpago_id == 3:
+            if value != "":
+                raise ValueError("El campo numero debe estar vacío cuando 'fpago_id' es 1 o 3.")
+        if fpago_id == 2 and not value.isdigit():
             raise ValueError("El número de tarjeta debe contener solo dígitos.")
         else:
             if entfin_id == 6:
@@ -181,8 +182,11 @@ class MovfPago(BaseModel):
                 raise ValueError("El campo 'entfin_id' debe ser 0 cuando 'fpago_id' es 1.")
             if numero not in (None, ""):
                 raise ValueError("El campo 'numero' debe estar vacío cuando 'fpago_id' es 1.")
-        else:
-            if value not in (3,6,7,8,71,100):
-                raise ValueError("Entidad financiera invalida.")
+        elif fpago_id == 2:
+            if value not in (3,6,7,8):
+                raise ValueError("Entidad financiera invalida para esta forma de pago.")
+        elif fpago_id == 3:
+            if value not in (71,100):
+                raise ValueError("Entidad financiera invalida para esta forma de pago.")
         
         return value
