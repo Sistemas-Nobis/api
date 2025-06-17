@@ -1136,8 +1136,9 @@ async def nomenclador(id: int):
         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
     
 
-@app.post("/obtener_prestadores", tags=["Auxiliares | BOT WISE"])
+@app.post("/obtener_prestadores/{id}", tags=["Auxiliares | BOT WISE"])
 async def obtener_prestadores(
+    id: int,
     data: PrestadoresRequest,
     token: str = Depends(obtener_token_gecros)
 ):
