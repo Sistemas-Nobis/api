@@ -665,7 +665,7 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
             periodo_hasta = periodo_actual
             if data.fpago_id == 2: # TC
                 #print("Tarjeta de credito")
-                if dia_actual <= 10:
+                if dia_actual <= 12:
                     #print(f"La forma de pago actual se vencerá este mes. {periodo_hasta}")
                     periodo_hasta = periodo_actual
                 else:
@@ -674,7 +674,7 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
             
             elif data.fpago_id == 3: # Debito
                 #print("Debito bancario")
-                if dia_actual <= 16:
+                if dia_actual <= 22:
                     #print(f"La forma de pago actual se vencerá este mes. {periodo_hasta}")
                     periodo_hasta = periodo_actual
                 else:
