@@ -2,7 +2,7 @@ from pydantic import BaseModel, field_validator, ValidationError, FieldValidatio
 import json
 from pydantic_core import PydanticCustomError
 import os
-from typing import Optional
+from typing import Optional, List
 
 
 with open("entidades.json", "r", encoding="utf-8") as f:
@@ -190,3 +190,11 @@ class MovfPago(BaseModel):
                 raise ValueError("Entidad financiera invalida para esta forma de pago.")
         
         return value
+    
+
+# Modelo de cartilla
+class PrestadoresRequest(BaseModel):
+    os_id: int
+    loc_id: int
+    plan_id: int
+    esp_ids: List[int]

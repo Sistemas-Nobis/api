@@ -24,6 +24,7 @@ from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import re
+import httpx
 
 app = FastAPI(
     title="API NOBIS",  # Cambia el nombre de la pestaña
@@ -631,8 +632,14 @@ async def actualizar_forma_de_pago(data: MovfPago, count: int, grupo_id: int, cu
         
         conn = None
         try:
+            ### PRODUCCION ###
             #conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=sistemas-admin;PWD={contraseña};TrustServerCertificate=yes")
-            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=172.16.0.31;DATABASE=GecrosPruebas;UID=apitests;PWD=sistemasapi;TrustServerCertificate=yes")
+            ##################
+
+            ### TESTS ###
+            conn = pyodbc.connect("DRIVER=FreeTDS;SERVER=172.16.0.31;PORT=1433;DATABASE=GecrosPruebas;UID=apitests;PWD=sistemasapi;TDS_Version=8.0")
+            #############
+
             cursor = conn.cursor()
             
             # Busqueda de movimiento actual
@@ -1127,3 +1134,41 @@ async def nomenclador(id: int):
             conn.close()
     else:
         raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
+    
+
+@app.post("/obtener_prestadores", tags=["Auxiliares | BOT WISE"])
+async def obtener_prestadores(
+    data: PrestadoresRequest,
+    token: str = Depends(obtener_token_gecros)
+):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+    url = "https://appmobile.nobissalud.com.ar/api/prestadores/cartilla"
+    todos_prestadores = []
+
+    async with httpx.AsyncClient() as client:
+        for esp_id in data.esp_ids:
+            body = {
+                "preId": None,
+                "nombrePrestador": "",
+                "oriId": 0,
+                "osId": data.os_id,
+                "planId": data.plan_id,
+                "espId": esp_id,
+                "locId": data.loc_id,
+                "mostrarOcultos": 2,
+                "farmacias": False
+            }
+            resp = await client.post(url, headers=headers, json=body)
+            if resp.status_code == 200:
+                resp_json = resp.json()
+                # Extrae los prestadores si existen
+                prestadores = resp_json.get("result", {}).get("prestadores", [])
+                todos_prestadores.extend(prestadores)
+            else:
+                # Si falla una consulta, puedes decidir si lanzar error o seguir
+                continue
+
+    return {"prestadores": todos_prestadores}
