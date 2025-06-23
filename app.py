@@ -1173,3 +1173,65 @@ async def obtener_prestadores(
                 continue
 
     return {"prestadores": todos_prestadores}
+
+
+@app.get("/origenes/{id}", tags=["Consultas | Macena DB"])
+async def origenes(id: int):
+    contraseña = load_password()
+    if id == 1:
+        try:
+            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+        except pyodbc.Error as e:
+            raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+        # Definir la consulta SQL
+        query = f"""
+        SELECT ori_id, REPLACE(ori_nom, '  ',''), loc_id, tp_id FROM origenes
+        """
+
+        try:
+            df = pd.read_sql_query(query, conn)
+            result_json = df.to_json(orient="records", date_format="iso")
+            return json.loads(result_json)
+        
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+        
+        finally:
+            conn.close()
+    else:
+        raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
+    
+
+@app.get("/proveedores/{id}", tags=["Consultas | Macena DB"])
+async def proveedores(id: int):
+    contraseña = load_password()
+    if id == 1:
+        try:
+            conn = pyodbc.connect(fr"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER=10.2.0.6\SQLMACENA;DATABASE=Gecros;UID=soporte_nobis;PWD={contraseña};TrustServerCertificate=yes")
+
+        except pyodbc.Error as e:
+            raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {e}")
+
+        # Definir la consulta SQL
+        query = f"""
+        SELECT prov_id, REPLACE(Prov_Nombre, '  ', '') AS Nombre, REPLACE(CUIT, ' ','') AS CUIT FROM proveedores
+        WHERE TipoProv_id NOT IN (3, 7)
+        """
+        # Excluye proveedores tipo "Afiliado (3)" y "FARMACIA (7)"
+        # Ejecutar la consulta y convertir los resultados a JSON
+        try:
+            df = pd.read_sql_query(query, conn)
+            result_json = df.to_json(orient="records", date_format="iso")
+            return json.loads(result_json)
+        
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error al ejecutar la consulta SQL")
+        
+        finally:
+            conn.close()
+    else:
+        raise HTTPException(status_code=401, detail="Error. Endpoint incorrecto.")
+    
+    
