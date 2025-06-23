@@ -1187,7 +1187,7 @@ async def origenes(id: int):
 
         # Definir la consulta SQL
         query = f"""
-        SELECT ori_id, REPLACE(ori_nom, '  ',''), loc_id, tp_id FROM origenes
+        SELECT ori_id, REPLACE(ori_nom, '  ','') AS nombre, loc_id, tp_id FROM origenes
         """
 
         try:
